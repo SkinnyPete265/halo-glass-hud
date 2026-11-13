@@ -4,3 +4,7 @@
 *.json text eol=lf
 *.yml text eol=lf
 *.ttf binary
+*.hpp text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.txt text eol=lf

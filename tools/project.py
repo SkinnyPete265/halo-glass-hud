@@ -1,6 +1,7 @@
 """Reusable project status, checks and release orchestration."""
 import argparse
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -98,9 +99,12 @@ def main():
     package=ROOT/'dist'/(manifest['id']+'.swoftyaddon')
     run(cli+['addons','install',str(package)])
     run(cli+['addons','enable',manifest['id']])
-    run(cli+['build','--game',settings['game']],ROOT/'build'/('swofty-build-v'+version+'.log'))
-    plans=list((Path(settings['data_dir'])/'cache/overlay'/profile).glob('*/plan.json'))
-    cache=max(plans,key=lambda path:path.stat().st_mtime).parent
+    log=ROOT/'build'/('swofty-build-v'+version+'.log')
+    run(cli+['build','--game',settings['game']],log)
+    matches=re.findall(r'^overlay [0-9a-f]+: (.+)$',log.read_text(encoding='utf-8',errors='replace'),re.MULTILINE)
+    if not matches:
+        raise RuntimeError('Build completed. Inspect the cache path in '+str(log))
+    cache=Path(matches[-1].strip())
     run([sys.executable,'-B','tools/verify_install.py','--cache',str(cache)])
     print(json.dumps({'version':version,'cache':str(cache),'rollback':str(rollback)},indent=2))
 
