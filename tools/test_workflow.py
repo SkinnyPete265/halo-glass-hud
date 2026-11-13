@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
+        (ROOT/'build').mkdir(parents=True,exist_ok=True)
         temporary = tempfile.TemporaryDirectory(prefix='workflow-test-', dir=ROOT/'build')
         self.root = Path(temporary.name).resolve()
         self.assertTrue(self.root.is_relative_to((ROOT/'build').resolve()))

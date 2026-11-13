@@ -40,6 +40,8 @@ def native():
 
 def artwork():
     """Reuse generated assets only when their inputs and recorded outputs match."""
+    for name in ('art','registry'):
+        (ROOT/name).mkdir(parents=True,exist_ok=True)
     fingerprint = artwork_inputs_fingerprint()
     cache_path = ROOT/'build/artwork-cache.json'
     try:
@@ -77,6 +79,7 @@ def main():
     args = parser.parse_args()
     record = artwork()
     if not args.skip_preview:
+        (ROOT/'design').mkdir(parents=True,exist_ok=True)
         composition.preview(record)
     from PIL import Image
     for sprite in record["sprites"].values():
