@@ -1,0 +1,6 @@
+{
+  "launcher": "C:/path/to/SwoftyLauncher/bin/swofty.exe",
+  "data_dir": "C:/path/to/Swofty",
+  "profile": "default",
+  "game": "C:/path/to/F1 25"
+}

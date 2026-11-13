@@ -1,0 +1,27 @@
+__pycache__/
+build/
+dist/
+*.obj
+*.exp
+*.lib
+native/*.dll
+
+# Local development state and tool configuration
+project.local.json
+PROJECT_STATE.md
+*.pdb
+design/reference/
+
+# Generated HUD data and preview media
+art/
+registry/hud.json
+runtime/
+design/
+
+# Local game-derived inputs
+native/reference/*.erpk
+native/reference/*.bin
+native/reference/*source.json
+.env
+.env.*
+!.env.example

@@ -1,0 +1,25 @@
+{
+  "repository": "Swofty-Developments/SwoftyLauncher",
+  "tag": "v1.9.0",
+  "sha256": {
+    "swofty/events.hpp": "214c1fcba6eabfddbe9d602a02158d9e3fe375bf103ed40c6a6e76f72126473b",
+    "swofty/fake_hud.hpp": "5461b00baf1e5f4e3457d0cfb674a154e4a72b51ab4536d40fd52019671a6f1c",
+    "swofty/fake_live.hpp": "29caa2742fbac8a7c302529d7f7a4118de56a0d186b03183981a5d1735bdb259",
+    "swofty/hud.hpp": "f1196e1c2b663ddf94501c6b447117330b8a7bfd1e0d5ac1c8c39260c06b6e1f",
+    "swofty/hud_format.hpp": "f6de4e8cb8062f6fcf29fdd9497bd4edb18c9fd37b7f47d72c7f7227f50c0bb6",
+    "swofty/hud_frame.hpp": "5097567b567810f288013b4025e9c5c97c2078b9c89007a3a58a618e1c29966b",
+    "swofty/hud_leaves.hpp": "10e5d803657f68e8409f91601333da4dadb0f5d4eb89b5ae966f4539e742580e",
+    "swofty/json.hpp": "deaec42d9d81762df8ba19f5c7042144d5829b2e9f21513d139e5bd31a2ba2e5",
+    "swofty/live.hpp": "a4d8eb022e492be41aca18b43e76e66724595e94946c5d4cdd0068da355ee763",
+    "swofty/mixin.hpp": "b9d677afb8bbe6105282a94378356bb5f6d5e3d17aa0d24adc2505ef7223836b",
+    "swofty/record.hpp": "f42525404d95912be0f608350a82cb3534ffc40ea5359129b975bbf00e144def",
+    "swofty/selector.hpp": "72bfc83d75c454a4b28b0450da35854cc2a807bdbf39f498527a1eb61f0cdaba",
+    "swofty/systems/forward.hpp": "bf366c6b95ca89186b9c65e7b91d93544050b581cd57b2a1792e67530e15ef5a",
+    "swofty_api.h": "8099748225188371dbe3a5c644015e2de474c1931bd4037b8b8b824c1580bcb5"
+  },
+  "license": {
+    "path": "LICENSE",
+    "url": "https://raw.githubusercontent.com/Swofty-Developments/SwoftyLauncher/v1.9.0/packages/sdk/LICENSE",
+    "sha256": "fc940b1f11976472566091a7324fd48e3dc0c50c5b7f32351de995fb154b9c07"
+  }
+}

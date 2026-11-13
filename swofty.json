@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "local.halo-hud-v2",
+  "name": "Halo Glass HUD v2 - Development",
+  "version": "0.11.0",
+  "author": "Local HUD project",
+  "description": "Shared Halo HUD with a wider native-clipped battery, heavier GEARS caption and a rounded RPM tip following the wing curve, plus the existing mode and sector animations.",
+  "license": "AGPL-3.0-or-later",
+  "kind": [
+    "ui",
+    "native"
+  ],
+  "category": "ui",
+  "compat": {
+    "game": "f1_25",
+    "launcher": ">=1.9.0"
+  },
+  "requires": [
+    {
+      "id": "swofty.core",
+      "version": ">=0.1.0"
+    }
+  ],
+  "experimental_features": [
+    "telemetry"
+  ],
+  "operations": {
+    "hud": [
+      "registry/hud.json"
+    ],
+    "native": [
+      {
+        "dll": "native/halo_hud_v2.dll"
+      },
+      {
+        "dll": "native/sector_times.dll"
+      }
+    ]
+  }
+}
