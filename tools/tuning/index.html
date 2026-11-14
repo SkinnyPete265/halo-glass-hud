@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Halo HUD tuning</title><style>
+@font-face {
+  font-family:Saira;
+  src:url('/font');
+  font-weight:100 900
+}
+* {
+  box-sizing:border-box
+}
+
+body {
+  margin:0;
+  background:#101a23;
+  color:#ecf4f8;
+  font:15px Saira,sans-serif
+}
+header {
+  padding:22px 28px;
+  border-bottom:1px solid #2b3e4d;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px
+}
+h1 {
+  font-size:23px;
+  margin:0;
+  font-weight:650
+}
+button,select,input {
+  font:inherit
+}
+button {
+  border:1px solid #48677d;
+  border-radius:7px;
+  padding:9px 15px;
+  color:#edf7fc;
+  background:#203749;
+  cursor:pointer
+}
+button.primary {
+  background:#8cd7fa;
+  color:#102633;
+  border-color:transparent;
+  font-weight:650
+}
+button:disabled {
+  opacity:.45;
+  cursor:wait
+}
+.actions {
+  display:flex;
+  gap:10px
+}
+main {
+  display:grid;
+  grid-template-columns:315px 1fr;
+  gap:25px;
+  padding:24px 28px
+}
+.controls {
+  background:#172632;
+  border:1px solid #304654;
+  border-radius:12px;
+  padding:20px
+}
+.control {
+  margin-bottom:16px
+}
+label {
+  display:block;
+  margin-bottom:5px;
+  color:#c7d9e5
+}
+.line {
+  display:flex;
+  align-items:center;
+  gap:12px
+}
+input[type=range] {
+  width:100%;
+  accent-color:#89d5fa;
+  min-width:0
+}
+input[type=number] {
+  width:86px;
+  padding:5px 7px;
+  color:#eef8fc;
+  background:#10202b;
+  border:1px solid #3a5364;
+  border-radius:5px
+}
+input[type=color] {
+  height:31px;
+  width:70px;
+  border:0;
+  background:transparent
+}
+select {
+  padding:5px 8px;
+  background:#1c3141;
+  color:#edf5f9;
+  border:1px solid #425e72;
+  border-radius:5px
+}
+h2 {
+  font-size:17px;
+  font-weight:600;
+  margin:0 0 18px
+}
+.preview-column {
+  min-width:0
+}
+.viewport {
+  background:#20333f;
+  border:1px solid #3a5364;
+  border-radius:12px;
+  overflow:hidden;
+  min-height:260px;
+  display:flex;
+  align-items:center
+}
+.viewport img {
+  width:100%;
+  height:auto;
+  display:block;
+  aspect-ratio:1200/440
+}
+.toolbar {
+  display:flex;
+  gap:18px;
+  align-items:center;
+  margin-bottom:16px
+}
+.toolbar label {
+  margin:0
+}
+.simulation {
+  margin-top:22px;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(120px,1fr));
+  gap:14px
+}
+p {
+  color:#a7bfce;
+  line-height:1.5
+}
+#status {
+  color:#b6dff4;
+  margin-top:16px;
+  min-height:28px
+}
+.note {
+  font-size:13px;
+  max-width:780px
+}
+.error {
+  color:#ffb2ad!important
+}
+@media(max-width:900px) {
+  main {
+  grid-template-columns:1fr
+}
+.preview-column {
+  grid-row:1
+}
+.simulation {
+  grid-template-columns:repeat(2,1fr)
+}
+header {
+  flex-wrap:wrap
+}
+
+}
+</style></head><body><header><h1>Halo HUD tuning</h1><div class="actions"><button id="export">Export draft</button><button id="reset">Reset draft</button><button id="apply" class="primary">Apply settings</button></div></header>
+<main><section class="controls"><h2>Shared style</h2><div id="styles"></div></section><section class="preview-column"><div class="toolbar"><label for="backdrop">Background</label><select id="backdrop"><option value="#20333f">Dark</option><option value="#cedde5">Light</option><option value="#657b70">Mid-tone</option></select></div><div class="viewport" id="viewport"><img id="preview" alt="Offline preview of the shared Halo HUD"></div><div id="status" role="status">Loading settings</div><p class="note">This 2025 simulation uses the shared HUD renderer. Native text rendering and live animations need an in-game check. Apply settings saves style.json for the next release build.</p><h2>Simulated inputs</h2><div class="simulation" id="simulation"></div></section></main>
+<script>
+let config,settings,saved,state={
+  speed:250,rpm:11585,gear:6,charge:.75,throttle:1,brake:0,drs:'distance'
+},timer,serial=0,objectURL;
+const status=document.querySelector('#status'),apply=document.querySelector('#apply');
+function message(text,error=false){
+  status.textContent=text;
+  status.classList.toggle('error',error)
+}
+function schedule(){
+  clearTimeout(timer);
+  timer=setTimeout(render,160)
+}
+function controls(){
+  const container=document.querySelector('#styles');
+  container.replaceChildren();
+  for(const [key,spec] of Object.entries(config.schema)){
+    const group=document.createElement('div');
+    group.className='control';
+    const label=document.createElement('label');
+    label.htmlFor=key;
+    label.textContent=spec.label;
+    group.append(label);
+    const line=document.createElement('div');
+    line.className='line';
+    if(spec.type==='colour'){
+      const color=document.createElement('input');
+      color.type='color';
+      color.id=key;
+      color.value=settings[key];
+      color.oninput=()=>{
+        settings[key]=color.value;
+        schedule()
+      };
+      line.append(color)
+    }else{
+      const slider=document.createElement('input'),number=document.createElement('input');
+      slider.type='range';
+      slider.min=number.min=spec.min;
+      slider.max=number.max=spec.max;
+      slider.step='any';
+      number.step=spec.step;
+      number.type='number';
+      number.id=key;
+      slider.setAttribute('aria-label',spec.label);
+      slider.value=number.value=settings[key];
+      slider.oninput=()=>{
+        settings[key]=Number(slider.value);
+        number.value=slider.value;
+        schedule()
+      };
+      number.onchange=()=>{
+        settings[key]=Number(number.value);
+        slider.value=number.value;
+        schedule()
+      };
+      line.append(slider,number)
+    }group.append(line);
+    container.append(group)
+  }
+}
+function simulations(){
+  const root=document.querySelector('#simulation');
+  for(const [key,label,min,max,step] of [['speed','Speed',0,400,1],['rpm','RPM',0,15000,100],['gear','Gear',-1,8,1],['charge','Battery charge',0,1,.01],['throttle','Throttle',0,1,.01],['brake','Brake',0,1,.01]]){
+    const group=document.createElement('div');
+    const title=document.createElement('label');
+    title.htmlFor='sim_'+key;
+    title.textContent=label;
+    const input=document.createElement('input');
+    input.type='number';
+    input.id='sim_'+key;
+    input.min=min;
+    input.max=max;
+    input.step=step;
+    input.value=state[key];
+    input.onchange=()=>{
+      state[key]=Number(input.value);
+      schedule()
+    };
+    group.append(title,input);
+    root.append(group)
+  }const group=document.createElement('div'),label=document.createElement('label'),select=document.createElement('select');
+  label.htmlFor='drs';
+  label.textContent='DRS state';
+  select.id='drs';
+  for(const name of ['hidden','distance','ready','open']){
+    const option=document.createElement('option');
+    option.value=option.textContent=name;
+    select.append(option)
+  }select.value=state.drs;
+  select.onchange=()=>{
+    state.drs=select.value;
+    schedule()
+  };
+  group.append(label,select);
+  root.append(group)
+}
+async function render(){
+  const current=++serial;
+  message('Rendering draft');
+  try{
+    const response=await fetch('/preview',{
+      method:'POST',headers:{
+        'Content-Type':'application/json'
+      },body:JSON.stringify({
+        settings,state
+      })
+    });
+    if(!response.ok)throw Error((await response.json()).error);
+    const blob=await response.blob();
+    if(current!==serial)return;
+    if(objectURL)URL.revokeObjectURL(objectURL);
+    objectURL=URL.createObjectURL(blob);
+    document.querySelector('#preview').src=objectURL;
+    message(JSON.stringify(settings)===JSON.stringify(saved)?'Saved settings preview':'Unsaved draft')
+  }catch(error){
+    if(current===serial)message(error.message,true)
+  }
+}
+apply.onclick=async()=>{
+  apply.disabled=true;
+  try{
+    const response=await fetch('/apply',{
+      method:'POST',headers:{
+        'Content-Type':'application/json'
+      },body:JSON.stringify({
+        settings,etag:config.etag
+      })
+    });
+    const result=await response.json();
+    if(!response.ok)throw Error(result.error);
+    config.etag=result.etag;
+    saved=structuredClone(result.settings);
+    settings=structuredClone(saved);
+    message(result.changed.length?'Settings saved. Next build uses '+result.build+'.':'Settings already saved.')
+  }catch(error){
+    message(error.message,true)
+  }finally{
+    apply.disabled=false
+  }
+};
+document.querySelector('#export').onclick=()=>{
+  const url=URL.createObjectURL(new Blob([JSON.stringify(settings,null,2)+'\n'],{
+    type:'application/json'
+  }));
+  const link=document.createElement('a');
+  link.href=url;
+  link.download='halo-style.json';
+  link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000)
+};
+document.querySelector('#reset').onclick=()=>{
+  settings=structuredClone(saved);
+  controls();
+  schedule()
+};
+document.querySelector('#backdrop').onchange=e=>document.querySelector('#viewport').style.background=e.target.value;
+(async()=>{
+  try{
+    const response=await fetch('/config');
+    if(!response.ok)throw Error('Unable to load settings');
+    config=await response.json();
+    settings=structuredClone(config.settings);
+    saved=structuredClone(settings);
+    controls();
+    simulations();
+    render()
+  }catch(error){
+    message(error.message,true)
+  }
+})();
+</script></body></html>

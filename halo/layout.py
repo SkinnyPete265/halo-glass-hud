@@ -1,6 +1,9 @@
 """One art-space geometry source for composition, artwork and previews."""
 from dataclasses import dataclass
 import math
+from .tuning import values
+
+STYLE = values()
 
 WIDTH, HEIGHT = 1200, 440
 CX, CY = 582.0, 95.0
@@ -21,8 +24,8 @@ DRS_OPEN_DURATION = .30
 DRS_CLOSE_DURATION = .075
 DRS_CLOSE_CURVE = 'generic_fade_off_fast'
 HUD_BOX_BOTTOM = 412.0 + (WING_HEIGHT - 122.0)
-BATTERY_CENTRE = (CX, 146.0)
-BATTERY_WIDTH, BATTERY_HEIGHT = 54.0 * 1.06 * 1.10, 22.0 * 1.02
+BATTERY_CENTRE = (CX, STYLE['battery_y'])
+BATTERY_WIDTH, BATTERY_HEIGHT = STYLE['battery_width'], STYLE['battery_height']
 BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .28
 BATTERY_TEXTURE_RESOLUTION = 3
 BATTERY_FILL_FEATHER = 0.0
@@ -68,7 +71,7 @@ class Text:
     size: float
     rotation: float = 0.0
 
-SPEED = Text(CX, CY, 38.0)
+SPEED = Text(CX, STYLE['speed_y'], STYLE['speed_size'])
 KPH = Text(CX, CY - 34.0, 15.0)
 SPECIAL_GEAR = Text(CX, CY + 72.0, 19.0)
 GEAR_ROW_OFFSET = 57.0
@@ -80,8 +83,8 @@ SECTOR_FADE_START = .55
 SECTOR_FADE_CURVE = 'generic_fade_on'
 SECTOR_FADE_DURATION = .15
 RPM_BAR_OFFSET = 87.0
-RPM_BAR_WIDTH = 3.8
-GEARS_FONT_WEIGHT = 700
+RPM_BAR_WIDTH = STYLE['rpm_width']
+GEARS_FONT_WEIGHT = STYLE['gears_weight']
 RPM_READOUT_OFFSET = 114.0
 RPM_NUMBER_SIZE = 16.5 * 0.95
 UNIT_LABEL_SIZE = 12.5
@@ -99,7 +102,7 @@ PEDAL_MASK_SPAN = .92 * PEDAL_MASK_SCALE / .0065
 
 def gears_caption():
     x = 902.5
-    return Text(x, top(x) + 23.0, 11.0 * 1.03, angle(x))
+    return Text(x, top(x) + 23.0, STYLE['gears_size'], angle(x))
 
 def top(x):
     return 30.0 + RADIUS - math.sqrt(RADIUS ** 2 - (x - CX) ** 2)

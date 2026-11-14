@@ -21,7 +21,7 @@ def files_fingerprint(paths):
     return digest.hexdigest()
 
 
-def artwork_inputs_fingerprint():
+def artwork_source_fingerprint():
     paths = list((ROOT/'halo').glob('*.py'))
     paths.extend(path for path in (ROOT/'assets/fonts/Saira').rglob('*') if path.is_file())
     paths.append(ROOT/'tools/build_inputs.py')
@@ -29,11 +29,19 @@ def artwork_inputs_fingerprint():
     return hashlib.sha256((files_fingerprint(paths) + versions).encode('utf-8')).hexdigest()
 
 
+def artwork_inputs_fingerprint():
+    source=artwork_source_fingerprint()
+    style=ROOT/'style.json'
+    if style.exists():
+        source+=file_hash(style)
+    return hashlib.sha256(source.encode('ascii')).hexdigest()
+
+
 def runtime_inputs_fingerprint():
     paths = list((ROOT/'art').glob('*.png'))
     paths.extend((ROOT/'tools/formats').glob('*.py'))
     paths.extend(path for path in (ROOT/'native/reference').rglob('*') if path.is_file())
     paths.extend(ROOT/name for name in ('swofty.json', 'registry/hud.json',
-                 'tools/build_inputs.py', 'tools/native_interop.py', 'tools/f126_interop.py', 'tools/prepare_runtime.py'))
+                 'tools/build_inputs.py', 'tools/native_interop.py', 'tools/f126_interop.py', 'tools/prepare_runtime.py', 'tools/asset_only.py'))
     combined = artwork_inputs_fingerprint() + files_fingerprint(paths)
     return hashlib.sha256(combined.encode('ascii')).hexdigest()

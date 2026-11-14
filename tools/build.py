@@ -10,7 +10,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from halo import composition
-from build_inputs import artwork_inputs_fingerprint, file_hash
+from build_inputs import artwork_inputs_fingerprint, runtime_inputs_fingerprint, file_hash
 from project_config import local_settings, launcher_command
 
 def run(command, **options):
@@ -56,6 +56,8 @@ def artwork():
         print('Reused generated artwork after content checks.')
         return json.loads((ROOT/'registry/hud.json').read_text())['hud.element']['glass_dial']
     record = composition.write()
+    if artwork_inputs_fingerprint()!=fingerprint:
+        raise RuntimeError('Source inputs changed during artwork generation. Retry the build.')
     outputs = {'registry/hud.json'}
     records=json.loads((ROOT/'registry/hud.json').read_text())['hud.element'].values()
     outputs.update(sprite['png'] for item in records for sprite in item['sprites'].values())
@@ -77,7 +79,10 @@ def main():
     parser.add_argument("--launcher", default=settings.get("launcher", "swofty"))
     parser.add_argument("--data-dir", default=settings.get("data_dir"))
     args = parser.parse_args()
+    authoring=artwork_inputs_fingerprint()
     record = artwork()
+    if artwork_inputs_fingerprint()!=authoring:
+        raise RuntimeError('Style changed during generation. Retry the build.')
     if not args.skip_preview:
         (ROOT/'design').mkdir(parents=True,exist_ok=True)
         composition.preview(record)
@@ -91,11 +96,15 @@ def main():
     if args.compose:
         launcher = launcher_command(args.launcher, args.data_dir)
         addon = json.loads((ROOT/'swofty.json').read_text(encoding='utf-8'))['id']
-        run(launcher + ["dev", "check", str(ROOT)])
-        run(launcher + ["hud", "compose", str(ROOT), "registry/hud.json",
-                        "--id", addon, "--out", str(ROOT / "build/composed")])
-        from prepare_runtime import prepare
-        prepare()
+        from asset_only import try_refresh,record as record_composition
+        expected_inputs=runtime_inputs_fingerprint()
+        if not try_refresh(launcher,addon,expected_inputs):
+            run(launcher + ['dev','check',str(ROOT)])
+            run(launcher + ['hud','compose',str(ROOT),'registry/hud.json',
+                            '--id',addon,'--out',str(ROOT/'build/composed')])
+            from prepare_runtime import prepare
+            prepare(expected_inputs)
+            record_composition(expected_inputs)
     print("Shared-layout artwork and composition are ready.")
 
 if __name__ == "__main__":

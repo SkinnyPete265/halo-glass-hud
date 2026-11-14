@@ -35,7 +35,7 @@ class WorkflowTests(unittest.TestCase):
         self.registry = {'hud.element': {'glass_dial': self.record}}
         (self.root/'registry/hud.json').write_text(json.dumps(self.registry))
         for name in ('halo/dial.py', 'tools/build_inputs.py', 'tools/native_interop.py',
-                     'tools/prepare_runtime.py', 'tools/f126_interop.py', 'assets/fonts/Saira/Saira.ttf',
+                     'tools/prepare_runtime.py', 'tools/f126_interop.py', 'tools/asset_only.py', 'assets/fonts/Saira/Saira.ttf',
                      'LICENSE', 'README.md', 'requirements.txt'):
             (self.root/name).write_text('fixture')
         self.manifest = {'id': 'local.workflow-fixture', 'version': '0.0.0',

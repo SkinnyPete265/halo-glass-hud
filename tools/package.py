@@ -46,9 +46,9 @@ def package():
             name = path.relative_to(ROOT).as_posix()
             entries[name] = path.read_bytes()
             source_paths.add(name)
-    example = ROOT/"project.local.example.json"
-    if example.is_file():
-        source_paths.add(example.name)
+    for name in ('project.local.example.json','style.json'):
+        if (ROOT/name).is_file():
+            source_paths.add(name)
     for folder in ("halo", "native/src", "native/include", "native/test",
                    "native/reference", "assets/fonts/Saira", "tools", "registry", "art"):
         source_paths.update(

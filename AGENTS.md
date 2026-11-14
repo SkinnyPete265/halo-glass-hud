@@ -48,8 +48,9 @@ authorization. Explicit user instructions can narrow the requested deliverable.
    the configured data directory/profile and build its SWOFTY cache.
 4. Run tools/verify_install.py against the exact new cache. Use --same-dlls-as with
    the rollback folder when all DLLs are unchanged. Record intentional DLL changes.
-5. Update PROJECT_STATE.md with the installed version, concise pending work and
-   verification/report paths. Report relevant warnings and in-game verification status.
+5. The release helper refreshes generated PROJECT_STATE.md facts automatically. Keep
+   owner feedback and pending work in its notes section. Report relevant warnings and
+   in-game verification status.
 
 ## Completion and context
 
@@ -62,6 +63,11 @@ authorization. Explicit user instructions can narrow the requested deliverable.
 
 ## Reusable command
 
-Use tools/project.py for status, check and release operations. The release --install
+Use tools/project.py for status, check, release, state, logs and tune operations. The release --install
 action performs the established build/install/verification sequence. See
 docs/REPOSITORY.md for setup and .agents/skills/halo-hud-release/SKILL.md for release use.
+
+For supported visual controls, prefer shared style.json. The local halo-hud-styling
+skill describes draft previews and texture-only candidates. Per-asset hashes and
+native compatibility checks select reuse automatically. Keep source changes outside
+an active build so its captured fingerprints remain consistent.

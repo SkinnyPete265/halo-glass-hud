@@ -1,0 +1,14 @@
+{
+  "battery_width": 62.964,
+  "battery_height": 22.44,
+  "battery_y": 146,
+  "gears_size": 11.33,
+  "gears_weight": 700,
+  "speed_size": 38,
+  "speed_y": 95,
+  "rpm_width": 3.8,
+  "gears_colour": "#ecf8fd",
+  "battery_blue": "#56c7ed",
+  "battery_yellow": "#f5d54c",
+  "battery_red": "#eb4e5b"
+}

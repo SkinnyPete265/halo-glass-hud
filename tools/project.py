@@ -7,6 +7,8 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from log_summary import save_summary
+from release_state import update as update_state
 from project_config import local_settings, launcher_command
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -16,8 +18,9 @@ def run(command,log=None):
     if log:
         with log.open('w',encoding='utf-8') as output:
             result=subprocess.run(command,cwd=ROOT,stdout=output,stderr=subprocess.STDOUT)
+        baseline=ROOT/'build/log-baselines'/(log.stem.split('-v')[0]+'.json')
+        print(json.dumps(save_summary(log,baseline,result.returncode),indent=2))
         if result.returncode:
-            print(log.read_text(encoding='utf-8',errors='replace')[-6000:])
             raise RuntimeError('Command failed. See '+str(log))
     else:
         subprocess.run(command,cwd=ROOT,check=True)
@@ -55,14 +58,31 @@ def preserve_installed(settings,manifest):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=('status','check','release'))
+    parser.add_argument('action',choices=('status','check','release','state','logs','tune'))
+    parser.add_argument('path',nargs='?',type=Path,help='Log file for the logs action')
+    parser.add_argument('--port',type=int,default=8766,help='Local tuning port')
     parser.add_argument('--install',action='store_true',help='Install and verify a requested release')
     parser.add_argument('--native',action='store_true',help='Rebuild DLLs and run native tests')
     args=parser.parse_args()
     if args.action!='release' and (args.install or args.native):
         parser.error('--install and --native apply to release')
+    if args.path and args.action!='logs':
+        parser.error('A file path applies to logs')
     settings=local_settings()
     manifest=json.loads((ROOT/'swofty.json').read_text(encoding='utf-8'))
+    if args.action=='tune':
+        from tune_server import serve
+        serve(port=args.port)
+        return
+    if args.action=='state':
+        print(json.dumps(update_state(),indent=2))
+        return
+    if args.action=='logs':
+        if args.path is None:
+            parser.error('Supply the log file')
+        baseline=ROOT/'build/log-baselines'/(args.path.stem.split('-v')[0]+'.json')
+        print(json.dumps(save_summary(args.path,baseline),indent=2))
+        return
     if args.action=='status':
         inputs=['native/reference/native-controls.erpk','native/reference/drs-template.bin']
         print(json.dumps({'root':str(ROOT),'version':manifest['version'],
@@ -76,6 +96,7 @@ def main():
         if not (ROOT/'registry/hud.json').exists():
             run([sys.executable,'-B','tools/build.py','--skip-preview'])
         run([sys.executable,'-B','tools/test_drs_battery.py'])
+        run([sys.executable,'-B','tools/test_devtools.py'])
         return
     required=('launcher','data_dir','game')
     if args.install and any(not settings.get(key) for key in required):
@@ -88,6 +109,8 @@ def main():
         command.append('--native')
     run(command,ROOT/'build'/('compose-v'+version+'.log'))
     run([sys.executable,'-B','tools/package.py'])
+    compose_log=ROOT/'build'/('compose-v'+version+'.log')
+    save_summary(compose_log,ROOT/'build/log-baselines/compose.json',accept=True)
     if not args.install:
         return
     if game_running():
@@ -106,7 +129,15 @@ def main():
         raise RuntimeError('Build completed. Inspect the cache path in '+str(log))
     cache=Path(matches[-1].strip())
     run([sys.executable,'-B','tools/verify_install.py','--cache',str(cache)])
+    save_summary(log,ROOT/'build/log-baselines/swofty-build.json',accept=True)
     print(json.dumps({'version':version,'cache':str(cache),'rollback':str(rollback)},indent=2))
 
 if __name__=='__main__':
-    main()
+    try:
+        main()
+    finally:
+        if sys.argv[1:2]==['release']:
+            try:
+                update_state()
+            except Exception as error:
+                print('Release state update failed. '+str(error),file=sys.stderr)

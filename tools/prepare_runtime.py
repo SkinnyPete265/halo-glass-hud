@@ -564,7 +564,10 @@ def validate_f126(archive, templates):
             'native_xrefs_and_signal_targets':True,'timer_lifecycle':True}
 
 
-def prepare():
+def prepare(expected_inputs=None):
+    expected_inputs=expected_inputs or runtime_inputs_fingerprint()
+    if runtime_inputs_fingerprint()!=expected_inputs:
+        raise ValueError('Source inputs changed before composition preparation')
     compiled, output = ROOT / 'build/composed', ROOT / 'runtime'
     output.mkdir(exist_ok=True)
     scene = erpw.Erp(compiled / 'hud_scene.erp')
@@ -613,10 +616,12 @@ def prepare():
          'erps': ['2025_asset_groups/ui_package/' + path for path in templates_paths]},
     ]}
     (output / 'overlays.json').write_text(json.dumps(operations, indent=2) + '\n', encoding='utf-8')
+    if runtime_inputs_fingerprint()!=expected_inputs:
+        raise ValueError('Source inputs changed during preparation. Retry the build.')
     record = {'clips': changes, 'native_clip_padding': native_padding,
         'native_interop': interop, 'checks': checks,
         'hud_registry_sha256': hashlib.sha256((ROOT / 'registry/hud.json').read_bytes()).hexdigest(),
-        'source_inputs_sha256': runtime_inputs_fingerprint(),
+        'source_inputs_sha256': expected_inputs,
         'unchanged_sample_values_except_sampled_rpm_tip': True,
         'runtime_archives': {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                              for path in output.glob('*.erp')}}

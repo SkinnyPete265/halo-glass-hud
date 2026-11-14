@@ -1,12 +1,13 @@
 """Instrument definitions shared by native authoring and offline previews."""
 import math
 from . import artwork as art, layout as geo, material as mat
+from .tuning import rgb
 
 S = art.S
 
-BATTERY_BLUE = (86, 199, 237)
-BATTERY_RED = (235, 78, 91)
-BATTERY_YELLOW = (245, 213, 76)
+BATTERY_BLUE = rgb(geo.STYLE['battery_blue'])
+BATTERY_RED = rgb(geo.STYLE['battery_red'])
+BATTERY_YELLOW = rgb(geo.STYLE['battery_yellow'])
 # The same charge-domain curve runs in both discharge and recharge directions.
 BATTERY_COLOUR_KEYS = (
     (0.00, BATTERY_RED),

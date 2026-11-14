@@ -1,5 +1,7 @@
 """Data-free sprites. Shared geometry supplies every instrument anchor."""
 import math
+from functools import lru_cache
+from .tuning import rgb
 from PIL import Image, ImageDraw, ImageChops
 from . import layout as geo, material as mat
 
@@ -20,7 +22,7 @@ def label(image, spec, value, **options):
     mat.text(image, spec.x, spec.y, value, spec.size,
              rotation=spec.rotation, **options)
 
-def base():
+def draw_base_static(rpm_width):
     image = mat.glass_wings()
     image.alpha_composite(mat.pedal_backing())
     image.alpha_composite(mat.pedal_accents())
@@ -55,9 +57,27 @@ def base():
     image.alpha_composite(idle_slats)
     label(image, geo.KPH, "KPH",
           color=(176, 211, 232, 240))
-    label(image, geo.gears_caption(), "GEARS", weight=geo.GEARS_FONT_WEIGHT, glow=True,
-          glow_color=(221, 242, 253), outline=.45)
-    return mat.rounded_stroke(image, geo.rpm_points(), mat.WHITE + (30,), geo.RPM_BAR_WIDTH)
+    return mat.rounded_stroke(image, geo.rpm_points(), mat.WHITE + (30,), rpm_width)
+
+
+@lru_cache(maxsize=8)
+def base_static(rpm_width):
+    from pathlib import Path
+    from .asset_cache import cached_layer
+    from tools.build_inputs import artwork_source_fingerprint
+    root=Path(__file__).resolve().parents[1]
+    return cached_layer(root,'base-backing',
+        {'source':artwork_source_fingerprint(),'rpm_width':rpm_width},
+        lambda:draw_base_static(rpm_width))
+
+
+def base():
+    image=base_static(geo.RPM_BAR_WIDTH).copy()
+    label(image,geo.gears_caption(),'GEARS',weight=geo.GEARS_FONT_WEIGHT,glow=True,
+          color=rgb(geo.STYLE['gears_colour'])+(255,),
+          glow_color=(221,242,253),outline=.45)
+    return image
+
 
 def rpm_fill():
     points = geo.rpm_points()
