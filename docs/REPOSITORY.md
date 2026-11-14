@@ -74,6 +74,24 @@ python -B tools/project.py logs build/compose-v0.11.0.log
 
 Raw logs remain available. Summaries show warning totals, newly introduced warnings
 and errors. Successful release/cache verification advances the relevant warning
-baseline. Baselines stay local under build/log-baselines.
+baseline. Reused composition preserves the previous warning baseline. Baselines stay
+local under build/log-baselines.
 
 The repository-local halo-hud-styling skill covers focused visual iterations.
+
+### Repeating a release
+
+Repeat the same release command after closing the game. Matching source/output hashes
+reuse the previously validated native composition and package. Missing, changed or
+corrupted outputs trigger regeneration. Native source or registry changes invalidate
+composition reuse. Packaging still checks runtime freshness before accepting reuse.
+
+Installation compares the package against the complete installed addon tree and reads
+the selected profile. Matching files skip reinstallation, and an enabled addon skips
+the enable command. SWOFTY handles cache freshness for game/profile changes, followed
+by verification of the resulting exact cache.
+
+Timing reports are build/build-timings.json for artwork/native composition and
+build/release-timings.json for preparation, packaging, installation, SWOFTY cache and
+installation verification. Failures also record the elapsed stage. Raw logs remain
+available alongside their compact summaries.

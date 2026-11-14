@@ -43,6 +43,7 @@ def state():
         for item in record["sprites"].values()
     }
     return {
+        "validation": file_hash(ROOT / "runtime/validation.json"),
         "structure": structure_fingerprint(),
         "registry": file_hash(ROOT / "registry/hud.json"),
         "style": json.loads((ROOT / "style.json").read_text()),
@@ -62,6 +63,31 @@ def record(expected_inputs=None):
     if expected_inputs and runtime_inputs_fingerprint() != expected_inputs:
         raise ValueError("Source changed while recording composition state")
     path.write_text(json.dumps(captured, indent=2) + "\n", encoding="utf-8")
+
+
+def try_reuse(expected_inputs):
+    """Reuse the previous native checks only when their inputs and outputs match."""
+    try:
+        previous = json.loads((ROOT / "build/composition-cache.json").read_text())
+        if previous != state():
+            return False
+        report = json.loads((ROOT / "runtime/validation.json").read_text())
+        if report.get("source_inputs_sha256") != expected_inputs:
+            return False
+        expected = report.get("runtime_archives", {})
+        if set(expected) != {"hud_scene.erp", "hud_template.erp"}:
+            return False
+        if any(
+            file_hash(ROOT / "runtime" / name) != value
+            for name, value in expected.items()
+        ):
+            return False
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+    print(
+        "Reused native composition and validation after matching input/output hashes."
+    )
+    return True
 
 
 def try_refresh(launcher, addon, expected_inputs=None):

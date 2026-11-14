@@ -30,6 +30,8 @@ Machine-specific paths are in ignored project.local.json.
 - Use focused checks during iteration. Research formats or broaden regression checks
   when the change or a failure warrants it. Recompile affected DLLs/tests for C++ changes.
 - Reuse cached assets and tested DLLs through the existing content/freshness checks.
+- Reuse already-read instructions and code within the ongoing change. Read changed
+  sections or new dependencies when needed.
 - Keep progress updates brief. Report material findings, blockers and completion.
 
 ## Requested release build
@@ -63,6 +65,8 @@ authorization. Explicit user instructions can narrow the requested deliverable.
 
 ## Reusable command
 
+Repeat the same release command to resume after game closure. Hash-verified outputs
+are reused, and matching installed/enabled state skips redundant SWOFTY actions.
 Use tools/project.py for status, check, release, state, logs and tune operations. The release --install
 action performs the established build/install/verification sequence. See
 docs/REPOSITORY.md for setup and .agents/skills/halo-hud-release/SKILL.md for release use.

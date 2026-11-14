@@ -162,6 +162,26 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Runtime inputs changed'):
             packaging.package()
 
+    def test_unchanged_package_reuses_verified_output(self):
+        self.validation()
+        output = packaging.package()
+        original = output.read_bytes()
+        with mock.patch.object(zipfile.ZipFile, "writestr", side_effect=AssertionError("Repacked unchanged files")):
+            self.assertEqual(packaging.package(), output)
+        self.assertEqual(output.read_bytes(), original)
+
+    def test_package_cache_detects_damage_and_source_only_changes(self):
+        self.validation()
+        output = packaging.package()
+        output.write_bytes(b"damaged")
+        packaging.package()
+        with zipfile.ZipFile(output) as archive:
+            self.assertIsNone(archive.testzip())
+        (self.root / "README.md").write_text("updated documentation")
+        packaging.package()
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(archive.read("README.md"), b"updated documentation")
+
     def test_failed_package_preserves_previous(self):
         self.validation()
         output = self.root/'dist/local.workflow-fixture.swoftyaddon'

@@ -14,6 +14,9 @@ Use the project root as the working directory. Machine paths come from project.l
 
 The release command preserves the installed addon, logs composition/cache output,
 checks game closure before installation, snapshots the profile and verifies the cache.
-If the game is running, continue with the prepared package after normal game closure.
+If the game is running, repeat the same command after normal game closure. Matching
+inputs and outputs reuse the validated composition and package. Matching installed
+files and enabled state skip redundant SWOFTY commands. Stage timings are recorded
+in build/build-timings.json and build/release-timings.json.
 Use the log path reported by the script to investigate failures. Generated release facts in PROJECT_STATE.md update automatically. Keep owner feedback
 in its notes section and distinguish offline from in-game verification.

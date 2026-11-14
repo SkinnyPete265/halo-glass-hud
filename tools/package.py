@@ -58,6 +58,21 @@ def package():
         entries["source/" + name] = (ROOT / name).read_bytes()
 
     output = ROOT / "dist" / (source_manifest["id"] + ".swoftyaddon")
+    identity = hashlib.sha256()
+    for name, data in sorted(entries.items()):
+        identity.update(name.encode("utf-8") + b"\0")
+        identity.update(hashlib.sha256(data).digest())
+    inputs = identity.hexdigest()
+    cache_path = ROOT / "build/package-cache.json"
+    try:
+        previous = json.loads(cache_path.read_text())
+        if (previous.get("inputs") == inputs
+                and previous.get("output") == hashlib.sha256(output.read_bytes()).hexdigest()):
+            print(f"Reused verified package {output}")
+            return output
+    except (OSError, ValueError, AttributeError):
+        pass
+
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=output.parent, prefix=output.name+'.',
                                      suffix='.tmp', delete=False) as pending:
@@ -77,7 +92,15 @@ def package():
         temporary.replace(output)
     finally:
         temporary.unlink(missing_ok=True)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    pending_cache = cache_path.with_suffix(".tmp")
+    pending_cache.write_text(json.dumps({
+        "inputs": inputs,
+        "output": hashlib.sha256(output.read_bytes()).hexdigest(),
+    }, indent=2) + "\n", encoding="utf-8")
+    pending_cache.replace(cache_path)
     print(f"Packaged {output} with {len(entries)} verified files")
+    return output
 
 if __name__ == "__main__":
     package()

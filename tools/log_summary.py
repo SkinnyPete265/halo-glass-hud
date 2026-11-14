@@ -23,6 +23,8 @@ def summarize(path, baseline=None, exit_code=0):
     counts = Counter()
     for line in lines:
         lower = line.lower()
+        if re.fullmatch(r"\s*\d+ errors?, \d+ warnings?\s*", lower):
+            continue
         if "[catalogue]" in lower:
             category = "catalogue"
         elif "stock layout" in lower or "built into the game files;" in lower:

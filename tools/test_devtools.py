@@ -1,12 +1,20 @@
 """Regression checks for asset invalidation, safe tuning and release diagnostics."""
 
 import hashlib
+import contextlib
+import io
 import importlib.util
 import json
 from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
+from types import SimpleNamespace
+import zipfile
+import asset_only
+import project
+from stage_timing import Timings
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +32,7 @@ class DeveloperToolsTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(dir=ROOT / "build", prefix="devtools-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        self.enterContext(contextlib.redirect_stdout(io.StringIO()))
         (self.root / "art").mkdir()
         self.settings = json.loads((ROOT / "style.json").read_text())
 
@@ -129,13 +138,129 @@ class DeveloperToolsTests(unittest.TestCase):
         path.write_text("[catalogue] known warning\nwarning: old\n")
         save_summary(path, baseline, accept=True)
         path.write_text(
-            "[catalogue] known warning\nwarning: old\nwarning: new\nValueError: broken field\n"
+            "[catalogue] known warning\nwarning: old\nwarning: new\n0 errors, 3 warnings\nValueError: broken field\n"
         )
         result = summarize(path, baseline, 1)
         self.assertEqual(result["new_warning_count"], 1)
         self.assertEqual(result["new_warnings"][0]["text"], "warning: new")
         self.assertIn("broken field", result["errors"][0])
         self.assertEqual(result["warning_counts"]["catalogue"], 1)
+
+    def test_native_reuse_checks_saved_state_report_and_outputs(self):
+        (self.root / "build").mkdir()
+        (self.root / "runtime").mkdir()
+        report = {"source_inputs_sha256": "source", "runtime_archives": {}}
+        for name in ("hud_scene.erp", "hud_template.erp"):
+            path = self.root / "runtime" / name
+            path.write_bytes(name.encode())
+            report["runtime_archives"][name] = digest(path)
+        (self.root / "runtime/validation.json").write_text(json.dumps(report))
+        (self.root / "build/composition-cache.json").write_text('{"identity":"saved"}')
+        with mock.patch.object(asset_only, "ROOT", self.root), mock.patch.object(
+            asset_only, "state", return_value={"identity": "saved"}
+        ):
+            self.assertTrue(asset_only.try_reuse("source"))
+            self.assertFalse(asset_only.try_reuse("different source"))
+            (self.root / "runtime/hud_scene.erp").write_bytes(b"damaged")
+            self.assertFalse(asset_only.try_reuse("source"))
+        with mock.patch.object(asset_only, "ROOT", self.root), mock.patch.object(
+            asset_only, "state", return_value={"identity": "changed"}
+        ):
+            self.assertFalse(asset_only.try_reuse("source"))
+
+    def test_timing_records_failed_stage(self):
+        path = self.root / "timings.json"
+        timings = Timings(path)
+        with self.assertRaisesRegex(ValueError, "failure"):
+            with timings.stage("fixture"):
+                raise ValueError("failure")
+        result = json.loads(path.read_text())["stages"][0]
+        self.assertEqual(result["status"], "failed")
+        self.assertGreaterEqual(result["seconds"], 0)
+
+    def test_installed_match_detects_changed_and_extra_files(self):
+        package = self.root / "addon.zip"
+        installed = self.root / "installed"
+        installed.mkdir()
+        (installed / "file").write_bytes(b"approved")
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr("file", b"approved")
+        self.assertTrue(project.installed_matches(package, installed))
+        (installed / "extra").write_bytes(b"old file")
+        self.assertFalse(project.installed_matches(package, installed))
+        (installed / "extra").unlink()
+        (installed / "file").write_bytes(b"changed")
+        self.assertFalse(project.installed_matches(package, installed))
+
+    def test_release_retry_skips_matching_install_and_enable(self):
+        store = self.root / "store"
+        (store / "profiles").mkdir(parents=True)
+        (store / "profiles/default.json").write_text(
+            '{"addons":[{"id":"test.hud","enabled":true}]}'
+        )
+        settings = {"data_dir": str(store), "launcher": "swofty", "game": "game"}
+        commands = []
+
+        def run(command, log=None):
+            commands.append(command)
+            if log:
+                log.parent.mkdir(parents=True, exist_ok=True)
+                log.write_text("overlay abcd: fixture-cache\n")
+
+        with mock.patch.object(project, "ROOT", self.root), mock.patch.object(
+            project, "run", side_effect=run
+        ), mock.patch.object(
+            project, "game_running", return_value=False
+        ), mock.patch.object(
+            project, "installed_matches", return_value=True
+        ), mock.patch.object(
+            project, "preserve_installed"
+        ) as backup:
+            project.release(
+                settings,
+                {"id": "test.hud", "version": "1"},
+                SimpleNamespace(native=False, install=True),
+            )
+            backup.assert_not_called()
+        self.assertFalse(
+            any("install" in command or "enable" in command for command in commands)
+        )
+        self.assertTrue(
+            any("verify_install.py" in " ".join(command) for command in commands)
+        )
+        self.assertEqual(
+            len(
+                json.loads((self.root / "build/release-timings.json").read_text())[
+                    "stages"
+                ]
+            ),
+            5,
+        )
+
+    def test_running_game_defers_install_after_preparing_package(self):
+        commands = []
+
+        def run(command, log=None):
+            commands.append(command)
+            if log:
+                log.parent.mkdir(parents=True, exist_ok=True)
+                log.write_text("")
+
+        with mock.patch.object(project, "ROOT", self.root), mock.patch.object(
+            project, "run", side_effect=run
+        ), mock.patch.object(
+            project, "game_running", return_value=True
+        ), mock.patch.object(
+            project, "preserve_installed"
+        ) as backup:
+            with self.assertRaisesRegex(RuntimeError, "Package ready"):
+                project.release(
+                    {},
+                    {"id": "test.hud", "version": "1"},
+                    SimpleNamespace(native=False, install=True),
+                )
+            backup.assert_not_called()
+        self.assertEqual(len(commands), 2)
 
     def test_state_update_preserves_notes_and_matching_install_version(self):
         (self.root / "swofty.json").write_text('{"id":"test.hud","version":"2.0"}')

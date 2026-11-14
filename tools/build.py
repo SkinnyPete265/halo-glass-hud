@@ -80,7 +80,10 @@ def main():
     parser.add_argument("--data-dir", default=settings.get("data_dir"))
     args = parser.parse_args()
     authoring=artwork_inputs_fingerprint()
-    record = artwork()
+    from stage_timing import Timings
+    timings = Timings(ROOT / "build/build-timings.json")
+    with timings.stage("artwork"):
+        record = artwork()
     if artwork_inputs_fingerprint()!=authoring:
         raise RuntimeError('Style changed during generation. Retry the build.')
     if not args.skip_preview:
@@ -92,19 +95,21 @@ def main():
             if image.width % 4 or image.height % 4:
                 raise ValueError(f"Non-aligned texture {sprite['png']}")
     if args.native:
-        native()
+        with timings.stage("native DLLs and tests"):
+            native()
     if args.compose:
         launcher = launcher_command(args.launcher, args.data_dir)
         addon = json.loads((ROOT/'swofty.json').read_text(encoding='utf-8'))['id']
-        from asset_only import try_refresh,record as record_composition
-        expected_inputs=runtime_inputs_fingerprint()
-        if not try_refresh(launcher,addon,expected_inputs):
-            run(launcher + ['dev','check',str(ROOT)])
-            run(launcher + ['hud','compose',str(ROOT),'registry/hud.json',
-                            '--id',addon,'--out',str(ROOT/'build/composed')])
-            from prepare_runtime import prepare
-            prepare(expected_inputs)
-            record_composition(expected_inputs)
+        from asset_only import try_refresh, try_reuse, record as record_composition
+        expected_inputs = runtime_inputs_fingerprint()
+        with timings.stage("native composition"):
+            if not try_reuse(expected_inputs) and not try_refresh(launcher, addon, expected_inputs):
+                run(launcher + ['dev','check',str(ROOT)])
+                run(launcher + ['hud','compose',str(ROOT),'registry/hud.json',
+                                '--id',addon,'--out',str(ROOT/'build/composed')])
+                from prepare_runtime import prepare
+                prepare(expected_inputs)
+                record_composition(expected_inputs)
     print("Shared-layout artwork and composition are ready.")
 
 if __name__ == "__main__":
