@@ -95,3 +95,14 @@ Timing reports are build/build-timings.json for artwork/native composition and
 build/release-timings.json for preparation, packaging, installation, SWOFTY cache and
 installation verification. Failures also record the elapsed stage. Raw logs remain
 available alongside their compact summaries.
+
+## Continuing in a fresh chat
+
+Open the repository's actual directory as the local project. Start with AGENTS.md and
+PROJECT_STATE.md. Include the next requested outcome and any visual reference needed
+for it. The component code map in AGENTS.md identifies the relevant implementation.
+Read DEVELOPMENT.md or historical notes when the current task needs that background.
+
+PROJECT_STATE.md is local and ignored by Git. A fresh clone requires current owner
+feedback and installed-state information from the working machine. Its generated
+block can be refreshed with tools/project.py state, which preserves manual notes.

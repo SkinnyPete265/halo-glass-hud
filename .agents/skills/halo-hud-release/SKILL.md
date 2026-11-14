@@ -18,5 +18,6 @@ If the game is running, repeat the same command after normal game closure. Match
 inputs and outputs reuse the validated composition and package. Matching installed
 files and enabled state skip redundant SWOFTY commands. Stage timings are recorded
 in build/build-timings.json and build/release-timings.json.
-Use the log path reported by the script to investigate failures. Generated release facts in PROJECT_STATE.md update automatically. Keep owner feedback
-in its notes section and distinguish offline from in-game verification.
+Use the reported log path to investigate failures. Generated release facts in
+PROJECT_STATE.md update automatically. Keep owner feedback in its notes section and
+distinguish offline from in-game verification.

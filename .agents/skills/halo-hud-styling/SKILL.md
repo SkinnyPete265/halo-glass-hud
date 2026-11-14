@@ -19,7 +19,8 @@ Other geometry remains in halo/layout.py and the component renderer named by AGE
 
 Build only when requested. The release helper chooses the compatible texture-refresh
 path for GEARS caption size, weight and colour. It falls back to full composition for
-registry, geometry, native-source or archive changes. Both paths run native validators.
+registry, geometry, native-source or archive changes. New composition and texture refresh run both native validators. Matching unchanged
+composition reuses saved validation after input/output hash checks.
 Use `python -B tools/project.py release --install` for an authorized build/install.
 Use `python -B tools/project.py logs LOGFILE` for a compact failure/warning comparison.
 

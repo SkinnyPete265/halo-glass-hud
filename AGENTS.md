@@ -2,10 +2,13 @@
 
 Use this file's directory as the project root. At the start of a chat, read
 PROJECT_STATE.md for the installed version, pending feedback and verified results.
-Machine-specific paths are in ignored project.local.json.
+Machine-specific paths are in ignored project.local.json. Read other documents and
+historical notes when they are relevant to the current task. Confirm that the chat's
+active workspace is this directory if file access needs repeated escalation.
 
 ## Code map
 
+- style.json and halo/tuning.py hold supported shared styling controls and ranges.
 - halo/layout.py defines geometry and sizing. artwork.py, material.py and
   feature_assets.py render assets. instruments.py holds shared instrument definitions.
 - halo/composition.py authors both dial records. dials.py defines their namespaces.
@@ -40,19 +43,20 @@ The established build request includes packaging, installation into the configur
 SWOFTY profile and cache verification. Continue through those steps with existing
 authorization. Explicit user instructions can narrow the requested deliverable.
 
-1. Run tools/build.py --compose --skip-preview, then tools/package.py. The compose
-   step runs the full native runtime validator. Run relevant regression tests once.
-   Run tools/test_workflow.py when changing caching, fingerprints or publication.
-2. Preserve the installed release package for rollback. Check whether F1 25 is running
-   before updating SWOFTY. If necessary, request normal game closure and continue
-   authorized offline work while waiting.
-3. Capture build/profile-before-PROFILE-vVERSION.json. Install/enable this addon using
-   the configured data directory/profile and build its SWOFTY cache.
-4. Run tools/verify_install.py against the exact new cache. Use --same-dlls-as with
-   the rollback folder when all DLLs are unchanged. Record intentional DLL changes.
-5. The release helper refreshes generated PROJECT_STATE.md facts automatically. Keep
-   owner feedback and pending work in its notes section. Report relevant warnings and
-   in-game verification status.
+1. Use `python -B tools/project.py release --install` for the requested release.
+   It manages preparation, rollback, profile snapshot, installation and exact-cache
+   verification. Use `release` for explicitly offline packaging. Add `--native` for
+   C++ changes. Run the relevant focused tests once for the change.
+2. The helper reuses matching artwork, validated composition, packages and installed
+   addon files. Source or output changes invalidate the relevant reuse. New native
+   composition and texture refresh run both validators. Unchanged composition reuses
+   their saved results after matching input/output hashes.
+3. If F1 25 is running, continue authorized offline work and request normal game
+   closure before installation. Repeat the same command afterward to resume.
+4. Review the compact result and new warnings. Open raw logs or timing reports for
+   failures or unexplained slowness. Use lower-level scripts for a specific diagnostic.
+5. The helper refreshes generated PROJECT_STATE.md facts. Keep owner feedback and
+   pending work in its manual notes. Report offline and in-game verification separately.
 
 ## Completion and context
 
@@ -67,8 +71,7 @@ authorization. Explicit user instructions can narrow the requested deliverable.
 
 Repeat the same release command to resume after game closure. Hash-verified outputs
 are reused, and matching installed/enabled state skips redundant SWOFTY actions.
-Use tools/project.py for status, check, release, state, logs and tune operations. The release --install
-action performs the established build/install/verification sequence. See
+Use tools/project.py for status, check, release, state, logs and tune operations. See
 docs/REPOSITORY.md for setup and .agents/skills/halo-hud-release/SKILL.md for release use.
 
 For supported visual controls, prefer shared style.json. The local halo-hud-styling
