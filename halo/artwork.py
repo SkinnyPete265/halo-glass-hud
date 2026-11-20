@@ -15,24 +15,37 @@ def rpm_warning_weight(fraction):
     return weight * weight * (3.0 - 2.0 * weight)
 
 
-def canvas():
-    return Image.new("RGBA", (geo.WIDTH * S, geo.HEIGHT * S))
+def canvas(top_padding=0):
+    return Image.new("RGBA", (geo.WIDTH * S,
+                               round((geo.HEIGHT + top_padding) * S)))
 
-def label(image, spec, value, **options):
-    mat.text(image, spec.x, spec.y, value, spec.size,
+def label(image, spec, value, y_offset=0.0, **options):
+    if value != 'GEARS' and geo.STYLE['text_colour'] != '#ffffff':
+        options['color'] = rgb(geo.STYLE['text_colour']) + (255,)
+    mat.text(image, spec.x, spec.y + y_offset, value, spec.size,
              rotation=spec.rotation, **options)
 
-def draw_base_static(rpm_width):
-    image = mat.glass_wings()
+def draw_base_static(rpm_width, race_variant=None):
+    race_variant = (mat.DEFAULT_RACE_EDGE_VARIANT if race_variant is None
+                    else race_variant)
+    if race_variant not in mat.RACE_EDGE_VARIANTS:
+        raise ValueError("Unknown race-edge variant " + str(race_variant))
+    style = mat.RACE_EDGE_VARIANTS[race_variant]
+    image = mat.glass_wings(race_variant)
     image.alpha_composite(mat.pedal_backing())
     image.alpha_composite(mat.pedal_accents())
-    disc = canvas()
+    top_padding = geo.ARTWORK_TOP_PADDING
+    expanded = canvas(top_padding)
+    expanded.alpha_composite(image, (0, round(top_padding * S)))
+    image = expanded
+    disc = canvas(top_padding)
     pixels = disc.load()
     radius = 89.0
-    for yy in range(round((geo.CY - radius) * S), round((geo.CY + radius) * S) + 1):
+    for yy in range(round((geo.CY + top_padding - radius) * S),
+                     round((geo.CY + top_padding + radius) * S) + 1):
         for xx in range(round((geo.CX - radius) * S), round((geo.CX + radius) * S) + 1):
             dx = ((xx + .5) / S - geo.CX) / radius
-            dy = ((yy + .5) / S - geo.CY) / radius
+            dy = ((yy + .5) / S - top_padding - geo.CY) / radius
             distance = math.hypot(dx, dy)
             coverage = max(0., min(1., .5 + (1. - distance) * radius * S))
             if coverage == 0:
@@ -42,41 +55,82 @@ def draw_base_static(rpm_width):
                               round(29 + 30 * highlight),
                               round(40 + 37 * highlight), round((195 + 24 * min(distance, 1.)) * coverage))
     image.alpha_composite(disc)
-    image = mat.circle_stroke(image, (geo.CX, geo.CY), radius, mat.CYAN + (125,), 3.0, 4.5)
-    image = mat.circle_stroke(image, (geo.CX, geo.CY), radius, (150, 210, 238, 170), .8, 1.0)
-    speed_ring = [(geo.CX + 61 * math.cos(a), geo.CY + 61 * math.sin(a))
-                  for a in (math.radians(140 + 260 * i / 180) for i in range(181))]
-    image = mat.stroke(image, speed_ring, mat.WHITE + (230,), 1.6, .8)
-    idle_slats = canvas()
-    draw = ImageDraw.Draw(idle_slats)
+    if style['circle_glow_alpha']:
+        image = mat.circle_glow(
+            image, (geo.CX, geo.CY + top_padding), radius,
+            mat.CYAN + (style['circle_glow_alpha'],), 3.0,
+            style['circle_glow_sigma'],
+            layers=style.get('circle_glow_layers', 1),
+        )
+    image = mat.circle_stroke(
+        image, (geo.CX, geo.CY + top_padding), radius,
+        mat.CYAN + (125,), 3.0, 4.5)
+    image = mat.circle_stroke(
+        image, (geo.CX, geo.CY + top_padding), radius,
+        (150, 210, 238, 170), .8, 1.0,
+        prefilter_core=True,
+    )
+    image = mat.arc_stroke(image, (geo.CX, geo.CY + top_padding), 61.0,
+                           140.0, 400.0, mat.WHITE + (230,), 1.6, .8,
+                           prefilter_core=True)
+    image.alpha_composite(_idle_slats_layer(), (0, round(top_padding * S)))
+    rpm_points = [(x, y + top_padding) for x, y in geo.rpm_points()]
+    return mat.rounded_stroke(image, rpm_points, mat.WHITE + (30,), rpm_width)
+
+
+def _idle_slats_layer():
+    """Rasterize both ten-slat banks into one filtered 3x alpha mask."""
+    mask = Image.new('L', (geo.WIDTH * S, geo.HEIGHT * S))
+    draw = ImageDraw.Draw(mask)
     for side in (-1, 1):
         for index in range(10):
             draw.polygon([(round(x * S), round(y * S))
-                          for x, y in geo.slat_points(side, index)],
-                         fill=(126, 176, 187, 55))
-    image.alpha_composite(idle_slats)
-    label(image, geo.KPH, "KPH",
-          color=(176, 211, 232, 240))
-    return mat.rounded_stroke(image, geo.rpm_points(), mat.WHITE + (30,), rpm_width)
+                          for x, y in geo.slat_points(side, index)], fill=255)
+    mask = mat._box_filter_alpha_3x3(mask)
+    alpha = mask.point(lambda value: round(value * 55 / 255.))
+    layer = Image.new('RGBA', mask.size, (126, 176, 187, 0))
+    layer.putalpha(alpha)
+    return layer
 
 
 @lru_cache(maxsize=8)
-def base_static(rpm_width):
+def base_static(rpm_width, wing_extension=None, wing_content_follow=None,
+                render_scale=None, race_variant=None):
     from pathlib import Path
     from .asset_cache import cached_layer
     from tools.build_inputs import artwork_source_fingerprint
+    if wing_extension is None:
+        wing_extension=geo.STYLE['wing_extension']
+    if wing_content_follow is None:
+        wing_content_follow=geo.STYLE['wing_content_follow']
+    if render_scale is None:
+        render_scale=S
+    if race_variant is None:
+        race_variant=mat.DEFAULT_RACE_EDGE_VARIANT
     root=Path(__file__).resolve().parents[1]
     return cached_layer(root,'base-backing',
-        {'source':artwork_source_fingerprint(),'rpm_width':rpm_width},
-        lambda:draw_base_static(rpm_width))
+        {'source':artwork_source_fingerprint(),'rpm_width':rpm_width,
+         'wing_extension':wing_extension,
+         'wing_content_follow':wing_content_follow,
+         'render_scale':render_scale,'race_edge_variant':race_variant},
+        lambda:draw_base_static(rpm_width,race_variant))
 
 
-def base():
-    image=base_static(geo.RPM_BAR_WIDTH).copy()
+def base(race_variant=None):
+    image=base_static(geo.RPM_BAR_WIDTH,geo.STYLE['wing_extension'],
+                      geo.STYLE['wing_content_follow'],S,race_variant).copy()
+    label(image,geo.KPH,"KPH",y_offset=geo.ARTWORK_TOP_PADDING,
+          color=(176,211,232,240))
     label(image,geo.gears_caption(),'GEARS',weight=geo.GEARS_FONT_WEIGHT,glow=True,
+          y_offset=geo.ARTWORK_TOP_PADDING,
           color=rgb(geo.STYLE['gears_colour'])+(255,),
           glow_color=(221,242,253),outline=.45)
     return image
+
+
+def texture_base(race_variant=None):
+    """Include the full outside-edge tails in the texture used by the game."""
+    return mat.wing_texture_frame(base(race_variant), geo.WING_TEXTURE_PADDING)
 
 
 def rpm_fill():
@@ -95,4 +149,5 @@ def rpm_fill():
     return image
 
 def finish(image, resolution=1, resample=Image.Resampling.LANCZOS):
-    return image.resize((geo.WIDTH * resolution, geo.HEIGHT * resolution), resample)
+    return image.resize((round(image.width * resolution / S),
+                         round(image.height * resolution / S)), resample)

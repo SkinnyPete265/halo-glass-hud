@@ -14,8 +14,9 @@ def main():
     before=Image.open(ROOT/'design/rails-sector-position-before.png').convert('RGBA')
     previous_length=geo.arc_length(1010.)-geo.arc_length(geo.DRS_RAIL_START)
     current_length=geo.arc_length(geo.DRS_RAIL_END)-geo.arc_length(geo.DRS_RAIL_START)
-    assert 1.095<current_length/previous_length<1.105
-    assert drs_motion.OUTER_X==geo.DRS_RAIL_END
+    assert current_length>previous_length
+    assert geo.DRS_RAIL_END==geo.WING_FACE_END
+    assert drs_motion.rail_limits()[1]==geo.DRS_RAIL_END==geo.WING_FACE_END
     assert abs(math.hypot(*sectors.row_step())-27.)<1e-6
     assert sectors.FONT_SIZE==21.*.95
     assert sectors.PREFIX_ADVANCES==(11.3,10.8,5.0)

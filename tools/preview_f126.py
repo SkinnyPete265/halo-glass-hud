@@ -11,22 +11,23 @@ from halo.f126 import BOOST_STATES
 
 def frame(state,sm,overtake,boost):
     image=render.static_base().copy()
-    render.sectors.draw(image,state.sector_times,state.sector_colours)
-    render.draw_pedals(image,state)
-    render.draw_pedal_labels(image)
-    render.draw_battery(image,state.charge)
-    render.draw_gears(image,state)
-    art.label(image,geo.SPEED,str(state.speed),weight=650)
-    render.draw_rpm(image,state)
+    overlay=art.canvas()
+    render.sectors.draw(overlay,state.sector_times,state.sector_colours)
+    render.draw_pedals(overlay,state)
+    render.draw_pedal_labels(overlay)
+    render.draw_battery(overlay,state.charge)
+    render.draw_gears(overlay,state)
+    art.label(overlay,geo.SPEED,str(state.speed),weight=650)
+    render.draw_rpm(overlay,state)
     if sm=='open':
-        image.alpha_composite(feature_assets.drs_rails())
-        drs_motion.draw(image,.60)
-        feature_assets.drs_text(image,geo.DRS_CENTRE,'SM OPEN',colour=geo.DRS_TEXT_COLOUR,outline=True)
+        overlay.alpha_composite(feature_assets.drs_rails())
+        drs_motion.draw(overlay,.60)
+        feature_assets.drs_text(overlay,geo.DRS_CENTRE,'SM OPEN',colour=geo.DRS_TEXT_COLOUR,outline=True)
     elif sm=='distance':
-        feature_assets.drs_text(image,geo.DRS_CENTRE,'SM 300M')
+        feature_assets.drs_text(overlay,geo.DRS_CENTRE,'SM 300M')
     else:
-        feature_assets.drs_text(image,(geo.CX+10,geo.DRS_CENTRE[1]),'SM')
-        draw=ImageDraw.Draw(image)
+        feature_assets.drs_text(overlay,(geo.CX+10,geo.DRS_CENTRE[1]),'SM')
+        draw=ImageDraw.Draw(overlay)
         x,y=geo.CX-23,geo.DRS_CENTRE[1]
         draw.line([((x-5)*art.S,(y+4)*art.S),(x*art.S,(y-5)*art.S),
                    ((x+5)*art.S,(y+4)*art.S),((x-5)*art.S,(y+4)*art.S)],
@@ -34,8 +35,9 @@ def frame(state,sm,overtake,boost):
     x=335.
     for offset,text in ((50.,'OVERTAKE ON' if overtake else 'OVERTAKE OFF'),
                         (76.,BOOST_STATES[boost])):
-        art.label(image,geo.Text(x,geo.top(x)+offset,13.,-16.),text,color=mat.UNIT_TEXT)
-    return art.finish(image)
+        art.label(overlay,geo.Text(x,geo.top(x)+offset,13.,-16.),text,color=mat.UNIT_TEXT)
+    image.alpha_composite(overlay,(0,round(geo.ARTWORK_TOP_PADDING*art.S)))
+    return mat.preview_finish(image)
 
 
 def main():

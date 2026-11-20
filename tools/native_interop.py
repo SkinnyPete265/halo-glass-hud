@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 from formats import erpw, idf, pkg, uinode as N, uiops as U
 from halo import layout, instruments, material, sectors, drs_motion, rpm_mask
+from halo.tuning import rgb
 from halo.dials import F125, F126
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -339,7 +340,9 @@ def drs_typography(scene, prompt_scene, native, controls, dial_child):
     open_holder = main_root.find('halo_v2_drs_open_label_n')
     world_per_pixel = layout.HUD_SCALE * .018
     native_scale = world_per_pixel / .0065
-    legacy_text_scale = open_holder.scale[0] / native_scale
+    legacy_text_scale = open_holder.scale[0] / native_scale * layout.STYLE['text_size'] / 100.
+    all_text_colour = (rgb(layout.STYLE['text_colour'])
+                       if layout.STYLE['text_colour'] != '#ffffff' else None)
     prompt_parents = {child.name: parent.obj for parent, _ in prompt_root.walk()
                       for child in parent.children}
     records = []
@@ -355,7 +358,8 @@ def drs_typography(scene, prompt_scene, native, controls, dial_child):
         if key == 'open':
             rings = [('glow',layout.DRS_LABEL_GLOW_RADIUS,layout.DRS_LABEL_GLOW_ALPHA,colour[:3])]
         if outline:
-            rings.insert(0, ('outline', .28, 30, (0, 0, 0)))
+            rings.insert(0, ('outline', .28 * layout.STYLE['text_outline'],
+                             30, (0, 0, 0)))
         count = 0
         for effect, radius, alpha, tint in rings:
             for index in range(4):
@@ -386,7 +390,8 @@ def drs_typography(scene, prompt_scene, native, controls, dial_child):
 
     decorate(open_holder.obj, main_root.find('halo_v2_drs_open_label').obj,
              N.child(controls, 't_drs_open_label'), controls, F1PATH+'.halo_v2_ctl',
-             world_per_pixel/open_holder.scale[0], 'open', layout.DRS_TEXT_COLOUR,
+             world_per_pixel/open_holder.scale[0], 'open',
+             all_text_colour or layout.DRS_TEXT_COLOUR,
              outline=True)
     captions = [
         ('text', native, 'bar_status', DRSPATH, 'status'),
@@ -402,7 +407,7 @@ def drs_typography(scene, prompt_scene, native, controls, dial_child):
         idf.set_param(glyph, 'textcase', 'upper')
         glyph.set('scale', pkg.Val('vec3', [legacy_text_scale,legacy_text_scale,1.,0.]))
         decorate(prompt_parents[name], glyph, N.child(owner,label_name), owner,
-                 context, .0065, key, layout.DRS_PROMPT_COLOUR)
+                 context, .0065, key, all_text_colour or layout.DRS_PROMPT_COLOUR)
     tooltip = N.child(native,'tooltip_drs_button')
     for name in ('icon','icon_as_text'):
         N.child(tooltip,name).items[N.PROPS].set('colourOverride', U.prop('rgba',
@@ -415,7 +420,7 @@ def drs_typography(scene, prompt_scene, native, controls, dial_child):
             ('drs_activate_tooltip_as_label','icon_as_text','keyboard')):
         decorate(prompt_parents[glyph_name],prompt_root.find(glyph_name).obj,
                  N.child(tooltip,binding_name),tooltip,DRSPATH+'.tooltip_drs_button',
-                 .0065,key,layout.DRS_PROMPT_COLOUR)
+                 .0065,key,all_text_colour or layout.DRS_PROMPT_COLOUR)
 
     idf.set_param(prompt_root.find('halo_drs_distance_row').obj,'gap',layout.DRS_DISTANCE_GAP*.0065,'fp32')
     idf.set_param(prompt_root.find('halo_drs_prompt_row').obj,'gap',layout.DRS_PROMPT_GAP*.0065,'fp32')
@@ -500,13 +505,19 @@ def drs(archive, reference, scene, f1, dial_child, controls):
             'prompt_art_centre': list(layout.DRS_CENTRE), 'travelling_highlight': sweep}
 
 
-def centre_text_readouts(scene, reference, ctx=F125):
+def centre_text_readouts(scene, reference, controls=None, ctx=F125):
     """Place live text using measured glyph bounds at the shared art anchors."""
     status = reference.find('eaid://ui_package/art/osd/local_halo/status.idf')
     prototype = idf.Idf(reference.frag_data(status, 0))
     centre = prototype.scenes[0].root.find('halo_drs_prompt_centre').obj
     number, unit = instruments.rpm_labels(11585)
     records = {}
+    if controls is not None and layout.STYLE['text_colour'] != '#ffffff':
+        colour = '#' + layout.STYLE['text_colour'][1:] + 'ff'
+        for name in ('speed', 'rpm_value', 'rpm_unit', 'brake_label',
+                     'throttle_label', 'special_gear'):
+            N.child(controls, 't_' + name).items[N.PROPS].set(
+                'colourOverride', U.prop('rgba', colour))
     readouts = [
             ('speed', layout.SPEED), ('rpm_value', number), ('rpm_unit', unit),
             ('brake_label', layout.pedal_label(-1)),
@@ -587,11 +598,13 @@ def sector_typography(scene, controls, dial_child, ctx=F125):
         surface['children'].items = [tangent]
         root.find(ctx.prefix).obj['children'].items.append(surface)
         controller = N.child(controls, 't_' + glyph.name)
-        colour = '#' + ''.join(f'{channel:02x}' for channel in glyph.colour)
+        glyph_colour = (rgb(layout.STYLE['text_colour']) + (255,)
+                        if layout.STYLE['text_colour'] != '#ffffff' else glyph.colour)
+        colour = '#' + ''.join(f'{channel:02x}' for channel in glyph_colour)
         controller.items[N.PROPS].set('colourOverride', U.prop('rgba', colour))
         part = 'prefix' if glyph.literal else 'time'
         world_per_pixel = layout.HUD_SCALE*.018
-        for index,effect in enumerate(sectors.effects(part,glyph.colour)):
+        for index,effect in enumerate(sectors.effects(part,glyph_colour)):
             effect_name = name + f'_light_{index}'
             centre = copy.deepcopy(measured)
             centre['name'].value = effect_name + '_n'
@@ -818,7 +831,7 @@ def apply(scene_archive, template_archive, ctx=F125):
             if not any(r.name == resource.name for r in scene_archive.res):
                 scene_archive.res.append(copy.deepcopy(resource))
                 copied.append(resource.name)
-    readouts = centre_text_readouts(scene, reference, ctx=ctx)
+    readouts = centre_text_readouts(scene, reference, controls, ctx=ctx)
     sector_layout = sector_typography(scene, controls, dial_child, ctx=ctx)
     rpm = rpm_readout(scene, reference, controls, dial_child, ctx=ctx)
     tip=rpm_tip_motion(scene_archive,reference,scene,ctx)

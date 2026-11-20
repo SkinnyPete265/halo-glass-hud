@@ -4,13 +4,14 @@ import json
 from pathlib import Path
 import struct
 from compression import zstd
-from build_inputs import runtime_inputs_fingerprint
-from formats import erpw, pkg, idf, uinode as N
+from compatibility import runtime_inputs_fingerprint
+from formats import erpw, pkg, idf, uinode as N, uiops as U
 import sys
+from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from native_interop import apply, walk, MAIN, TEMPLATE, F1PATH
-from halo import layout, sectors, drs_motion, rpm_mask
+from halo import layout, sectors, drs_motion, rpm_mask, instruments
 from halo.dials import DIALS, F125, F126
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,6 +72,313 @@ def repair_gauges(archive):
     if {item['resource'] for item in changes} != expected:
         raise ValueError('Composer clips differ from the authored gauges')
     return changes
+
+
+def share_editor_preview(scene_archive, template_archive):
+    """Keep one common editor preview and point both hidden setters at it."""
+    resource = scene_archive.find(MAIN)
+    scene = idf.Idf(scene_archive.frag_data(resource, 0))
+    if len(scene.scenes) != 1:
+        raise ValueError('Expected one main dial scene for the editor preview')
+    entry = scene.scenes[0].entry
+    scene_root = entry.get('scene')
+
+    def preview_objects(obj, found=None):
+        found = found if found is not None else {}
+        name = obj.get('name')
+        name = name.value if name is not None else None
+        if name in ('halo_v2_pv', 'halo_v2_26_pv'):
+            found.setdefault(name, []).append(obj)
+        children = obj.get('children')
+        if isinstance(children, pkg.Arr):
+            for child in children.items:
+                if isinstance(child, pkg.Obj):
+                    preview_objects(child, found)
+        return found
+
+    found = preview_objects(scene_root)
+    if any(len(found.get(name, [])) != 1
+           for name in ('halo_v2_pv', 'halo_v2_26_pv')):
+        raise ValueError('Expected exactly one shared and one 2026 editor preview root')
+    shared = idf.Element(found['halo_v2_pv'][0])
+    duplicate = idf.Element(found['halo_v2_26_pv'][0])
+    if (shared.position, shared.scale, shared.rotation) != (
+            duplicate.position, duplicate.scale, duplicate.rotation):
+        raise ValueError('Editor preview roots no longer share the same transform')
+
+    # UIPRE entries address widgets by their leaf-name hash, not the IDF's
+    # dotted-path elementId. Capture all of those targets before removing the
+    # duplicate subtree so its preset setters can be removed with it.
+    removed_name_ids = {idf.djb2(element.name) for element, _ in duplicate.walk()}
+    uipre_name = 'eaid://ui_package/art/osd/components/dial/dial_complete.uipre'
+    preset_resource = scene_archive.find(uipre_name)
+    preset = pkg.Pkg(scene_archive.frag_data(preset_resource, 0))
+    if int(preset.root['TargetId'].value) != int(scene.scenes[0].name):
+        raise ValueError('Dial editor preset no longer targets the main scene')
+    preset_elements = preset.root.get('Elements')
+    if not isinstance(preset_elements, pkg.Arr):
+        raise ValueError('The dial editor preset has no Elements array')
+
+    def preset_ids(elements):
+        return {int(element['Id'].value) for element in elements.items}
+
+    def preset_signature(value):
+        if isinstance(value, pkg.Val):
+            return ('value', value.type, preset_signature(value.value))
+        if isinstance(value, pkg.Obj):
+            return ('object', tuple((key.value, preset_signature(item))
+                                    for key, item in value.items))
+        if isinstance(value, pkg.Arr):
+            return ('array', tuple(preset_signature(item) for item in value.items))
+        if isinstance(value, (list, tuple)):
+            return tuple(preset_signature(item) for item in value)
+        return value
+
+    scene_name_ids_before = {
+        idf.djb2(element.name) for element, _ in scene.scenes[0].root.walk()
+    }
+    original_preset_ids = preset_ids(preset_elements)
+    unresolved_before = original_preset_ids - scene_name_ids_before
+    if len(unresolved_before) != 1:
+        raise ValueError('Expected exactly one unrelated unresolved baseline preset target')
+    removed_preset_ids = removed_name_ids & original_preset_ids
+    if not removed_preset_ids:
+        raise ValueError('The duplicate preview has no matching editor preset targets')
+    preserved_signatures = [preset_signature(element)
+                            for element in preset_elements.items
+                            if int(element['Id'].value) not in removed_preset_ids]
+    preset_elements.items = [
+        element for element in preset_elements.items
+        if int(element['Id'].value) not in removed_preset_ids
+    ]
+    if [preset_signature(element) for element in preset_elements.items] != preserved_signatures:
+        raise ValueError('Stock or shared editor preset setters changed during cleanup')
+
+    def remove_child(obj, target):
+        children = obj.get('children')
+        if not isinstance(children, pkg.Arr):
+            return False
+        before = len(children.items)
+        children.items = [child for child in children.items if child is not target]
+        if len(children.items) != before:
+            return True
+        return any(remove_child(child, target) for child in children.items
+                   if isinstance(child, pkg.Obj))
+
+    if not remove_child(scene_root, found['halo_v2_26_pv'][0]):
+        raise ValueError('Could not remove the duplicate 2026 editor preview root')
+    idf.relookup(entry)
+
+    # Only the editor copy receives the static 75% cyan sample textures.
+    # The gameplay battery remains on its original materials and clips.
+    preview_root = idf.Element(found['halo_v2_pv'][0])
+    for part in ('frame', 'fill'):
+        element_name = ('halo_v2_pv_battery_frame' if part == 'frame' else
+                        'halo_v2_pv_battery_charge_fill')
+        element = preview_root.find(element_name)
+        if element is None or len(element.geoms) != 1:
+            raise ValueError('Editor battery ' + part + ' geometry is missing')
+        old_material = element.geoms[0].get('materialid')
+        expected_old = (
+            'eaid://ui_package/art/osd/components/hud/'
+            + 'halo_v2_battery_' + ('frame' if part == 'frame' else 'fill')
+            + '.emb?context=default')
+        if old_material != expected_old:
+            raise ValueError('Unexpected editor battery ' + part + ' material')
+        new_material = (
+            'eaid://ui_package/art/osd/components/hud/halo_v2_battery_preview_'
+            + part + '.emb?context=default')
+        geom = element.obj['geoms'].items[0]
+        geom['materialid'].value = new_material
+        scene_archive.find(new_material)
+
+    scene_archive.set_frag(resource, 0, scene.to_bytes())
+    scene_archive.set_frag(preset_resource, 0, preset.to_bytes())
+
+    ui_resource = template_archive.find(TEMPLATE)
+    template = pkg.Pkg(template_archive.frag_data(ui_resource, 0))
+    f1 = next((node for node in walk(template.root)
+               if N.name(node) == F125.template), None)
+    if f1 is None:
+        raise ValueError('Could not find the shared dial editor controls')
+    setters = {
+        N.name(node): node for node in walk(f1)
+        if N.name(node) in ('v_halo_v2_pv', 'v_halo_v2_26_pv')
+    }
+    if set(setters) != {'v_halo_v2_pv', 'v_halo_v2_26_pv'}:
+        raise ValueError('Expected both editor preview visibility setters')
+    for node in setters.values():
+        node.items[N.LAYOUT] = U.layout_path('halo_v2_pv')
+    template_archive.set_frag(ui_resource, 0, template.to_bytes())
+    remaining_name_ids = {
+        idf.djb2(element.name) for element, _ in scene.scenes[0].root.walk()
+    }
+    unresolved_after = preset_ids(preset_elements) - remaining_name_ids
+    if unresolved_after != unresolved_before:
+        raise ValueError('Removing the duplicate preview introduced unresolved preset targets')
+    return {
+        'shared_scene_root': 'halo_v2_pv',
+        'removed_duplicate_scene_root': 'halo_v2_26_pv',
+        'retargeted_setters': sorted(setters),
+        'removed_preset_targets': len(removed_preset_ids),
+        'unresolved_preset_targets_before': len(unresolved_before),
+        'unresolved_preset_targets_after': len(unresolved_after),
+        'new_unresolved_preset_targets': 0,
+        'preview_battery_materials': {
+            'frame': 'halo_v2_battery_preview_frame',
+            'fill': 'halo_v2_battery_preview_fill',
+        },
+        'transform_preserved': True,
+    }
+
+
+def validate_editor_preview(archive, templates):
+    """Validate the single editor scene and both hidden UI layout targets."""
+    scene = idf.Idf(archive.frag_data(archive.find(MAIN), 0))
+    root = scene.scenes[0].root
+    names = [element.name for element, _ in root.walk()]
+    if names.count('halo_v2_pv') != 1 or 'halo_v2_26_pv' in names:
+        raise ValueError('The editor scene must contain only one shared preview root')
+    if any(name.startswith('halo_v2_26_pv_') for name in names):
+        raise ValueError('2026-only diagnostics remain in the editor preview scene')
+    preview = root.find('halo_v2_pv')
+    if preview.path != 'boundless_customisation.halo_v2_pv':
+        raise ValueError('Shared editor preview must stay under boundless_customisation')
+    preview_names = [element.name for element, _ in preview.walk()]
+    direct_names = [child.name for child in preview.children]
+    if 'halo_v2_pv_base' not in direct_names:
+        raise ValueError('Shared editor preview is missing its base artwork')
+    for gear in range(1, 9):
+        if not any(name.startswith(f'halo_v2_pv_gear_{gear}_')
+                   for name in direct_names):
+            raise ValueError(f'Shared editor preview is missing gear {gear}')
+    if sum(name.startswith('halo_v2_pv_sector_') for name in preview_names) != 162:
+        raise ValueError('Shared editor preview sector label set is incomplete')
+    if 'halo_v2_pv_battery_charge_win' not in preview_names:
+        raise ValueError('Shared editor preview is missing its battery charge mask')
+
+    preview_materials = {
+        'frame': 'eaid://ui_package/art/osd/components/hud/halo_v2_battery_preview_frame.emb?context=default',
+        'fill': 'eaid://ui_package/art/osd/components/hud/halo_v2_battery_preview_fill.emb?context=default',
+    }
+    original_materials = {
+        'frame': 'eaid://ui_package/art/osd/components/hud/halo_v2_battery_frame.emb?context=default',
+        'fill': 'eaid://ui_package/art/osd/components/hud/halo_v2_battery_fill.emb?context=default',
+    }
+    for part, name in (('frame', 'halo_v2_pv_battery_frame'),
+                       ('fill', 'halo_v2_pv_battery_charge_fill')):
+        element = preview.find(name)
+        if element is None or len(element.geoms) != 1:
+            raise ValueError('Shared editor battery ' + part + ' geometry is missing')
+        if element.geoms[0].get('materialid') != preview_materials[part]:
+            raise ValueError('Shared editor battery ' + part + ' is not tinted by its preview asset')
+        material = archive.find(preview_materials[part])
+        embedded = archive.frag_data(material, 0)
+        if b'halo_v2_battery_preview_' + part.encode() + b'.material' not in embedded:
+            raise ValueError('Shared editor battery ' + part + ' material does not resolve to its preview tint')
+        texture_name = ('eaid://ui_package/art/osd/textures/hud/halo_v2_battery_preview_'
+                        + part + '.tif')
+        archive.find(texture_name)
+        image_resource = archive.find(texture_name + '.image')
+        width, height = struct.unpack_from('<II', archive.frag_data(image_resource, 0), 12)
+        with Image.open(ROOT / ('art/battery_preview_' + part + '.png')) as image:
+            source = image.convert('RGBA')
+        if source.size != (width, height):
+            raise ValueError('Serialized editor battery ' + part + ' dimensions differ from its cyan sprite')
+        decoded = Image.frombytes('RGBA', (width, height),
+                                  archive.frag_data(image_resource, 1),
+                                  'bcn', 7, 'BC7')
+        expected_colour = instruments.battery_colour(.75)
+        visible_colours = {pixel[:3] for pixel in source.getdata() if pixel[3]}
+        if visible_colours != {expected_colour}:
+            raise ValueError('Editor battery ' + part + ' source sprite is not the 75% cyan tint')
+        for source_pixel, decoded_pixel in zip(source.getdata(), decoded.getdata()):
+            if source_pixel[3] >= 128 and max(abs(source_pixel[i] - decoded_pixel[i])
+                                              for i in range(3)) > 1:
+                raise ValueError('Editor battery ' + part + ' decoded texture lost its cyan tint')
+
+    live_scene = scene.scenes[0].root
+    for part, name in (('frame', 'halo_v2_battery_frame'),
+                       ('fill', 'halo_v2_battery_charge_fill')):
+        element = live_scene.find(name)
+        if element is None or len(element.geoms) != 1 or element.geoms[0].get('materialid') != original_materials[part]:
+            raise ValueError('Live battery ' + part + ' material changed with the editor tint')
+        expected_clip = MAIN + '/halo_v2_battery_' + (
+            'frame' if part == 'frame' else 'charge_fill') + '_colour?context=animation'
+        if expected_clip not in {animation.get('asset') for animation in element.anims}:
+            raise ValueError('Live battery ' + part + ' lost its native colour animation')
+        archive.find(expected_clip)
+
+    preview_fill = preview.find('halo_v2_pv_battery_charge_fill')
+    live_fill = live_scene.find('halo_v2_battery_charge_fill')
+    preview_window = preview.find('halo_v2_pv_battery_charge_win')
+    live_window = live_scene.find('halo_v2_battery_charge_win')
+    window_geometry = ('width', 'length', 'minExtents', 'maxExtents',
+                       'cornerCurves', 'cornerCurvesRadius')
+    if (preview_fill is None or live_fill is None or preview_window is None or
+            live_window is None or preview_window.type != 'eWindow' or
+            (preview_fill.position, preview_fill.scale) !=
+            (live_fill.position, live_fill.scale) or
+            (preview_window.position, preview_window.scale) !=
+            (live_window.position, live_window.scale) or
+            any(preview_window.params.get(key) != live_window.params.get(key)
+                for key in window_geometry)):
+        raise ValueError('Static 75% editor battery clip geometry changed during tinting')
+
+    registry = json.loads((ROOT / 'registry/hud.json').read_text(encoding='utf-8'))
+    records = registry['hud.element']
+    expected_sample = {
+        'game.ers_stored': .75,
+        'game.has_ers': True,
+    }
+    for key in ('glass_dial', 'glass_dial_26'):
+        preview_values = records[key].get('editor', {}).get('preview', {})
+        if any(preview_values.get(name) != value
+               for name, value in expected_sample.items()):
+            raise ValueError('Editor battery preview must use the partial-charge sample')
+
+    template = pkg.Pkg(templates.frag_data(templates.find(TEMPLATE), 0))
+    f1 = next((node for node in walk(template.root)
+               if N.name(node) == F125.template), None)
+    if f1 is None:
+        raise ValueError('Could not find editor preview visibility controls')
+    setters = {
+        N.name(node): node for node in walk(f1)
+        if N.name(node) in ('v_halo_v2_pv', 'v_halo_v2_26_pv')
+    }
+    if set(setters) != {'v_halo_v2_pv', 'v_halo_v2_26_pv'}:
+        raise ValueError('A shared editor preview visibility setter is missing')
+    for name, node in setters.items():
+        node_type = struct.pack('<I', node.items[N.PROPS]['type'].value).decode()
+        visibility = node.items[N.PROPS].get('visible')
+        layout_groups = node.items[N.LAYOUT].items
+        links = [item for group in layout_groups for item in group.items]
+        if (node_type != 'UIGP' or visibility is None or
+                visibility['value'].value is not False):
+            raise ValueError('Editor preview visibility setter must remain hidden by default')
+        if (len(links) != 1 or links[0]['debugName'].value != 'halo_v2_pv' or
+                links[0]['nodeId'].value != N.djb2('halo_v2_pv')):
+            raise ValueError('Editor preview setter does not resolve to the shared root')
+    scene_name_ids = {idf.djb2(element.name) for element, _ in root.walk()}
+    preset_resource = archive.find('eaid://ui_package/art/osd/components/dial/dial_complete.uipre')
+    preset = pkg.Pkg(archive.frag_data(preset_resource, 0))
+    if int(preset.root['TargetId'].value) != int(scene.scenes[0].name):
+        raise ValueError('Shared preview preset target changed from the main scene')
+    preset_ids = {int(element['Id'].value) for element in preset.root['Elements'].items}
+    unresolved = preset_ids - scene_name_ids
+    if len(unresolved) != 1:
+        raise ValueError('Shared preview preset cleanup must leave only the one unrelated baseline target')
+    return {
+        'single_shared_preview': True,
+        'preview_under_boundless_customisation': True,
+        'preview_tint_assets_resolve': True,
+        'live_battery_materials_and_colour_animation_preserved': True,
+        'shared_gears_and_sectors': True,
+        'partial_battery_sample': True,
+        'both_hidden_setters_resolve': True,
+        'both_race_hide_targets_hidden_by_default': True,
+        'unresolved_preset_targets': 1,
+    }
 
 
 def validate(archive, templates):
@@ -576,6 +884,7 @@ def prepare(expected_inputs=None):
         for index in range(len(resource.frags))] for resource in scene.res}
     changes = repair_gauges(scene)
     interop = {ctx.dial: apply(scene, templates, ctx=ctx) for ctx in DIALS}
+    editor_preview = share_editor_preview(scene, templates)
     native_padding = []
     for resource in scene.res:
         if resource.name.endswith('?context=animation'):
@@ -590,10 +899,13 @@ def prepare(expected_inputs=None):
     final_template = erpw.Erp(output / 'hud_template.erp')
     clips = {item['resource'] for item in changes}
     tip_clips={name for info in interop.values() for name in info['rpm_tip']['clips']}
+    allowed_changed_resources = {
+        'eaid://ui_package/art/osd/components/dial/dial_complete.uipre',
+    }
     for name, fragments in before.items():
         resource = final.find(name)
         actual = [final.frag_data(resource, index) for index in range(len(resource.frags))]
-        if name in {ctx.main for ctx in DIALS}:
+        if name in {ctx.main for ctx in DIALS} or name in allowed_changed_resources:
             continue
         if name in tip_clips:
             continue  # Validated against the exact shared sampled path below.
@@ -606,7 +918,11 @@ def prepare(expected_inputs=None):
                 raise ValueError('Position clip metadata or samples changed ' + name)
         elif actual != fragments:
             raise ValueError('Unexpected composer resource change ' + name)
-    checks = {'f1_25': validate(final, final_template), 'f1_26': validate_f126(final, final_template)}
+    checks = {
+        'editor_preview': validate_editor_preview(final, final_template),
+        'f1_25': validate(final, final_template),
+        'f1_26': validate_f126(final, final_template),
+    }
     scenes = ['flow_race.erp', 'flow_options.erp', 'persistent.erp', 'screens/hud_spectator_2.erp']
     templates_paths = ['flow_race.erp', 'flow_options.erp']
     operations = {'schema_version': 1, 'ops': [
@@ -619,7 +935,8 @@ def prepare(expected_inputs=None):
     if runtime_inputs_fingerprint()!=expected_inputs:
         raise ValueError('Source inputs changed during preparation. Retry the build.')
     record = {'clips': changes, 'native_clip_padding': native_padding,
-        'native_interop': interop, 'checks': checks,
+        'native_interop': interop, 'editor_preview': editor_preview,
+        'checks': checks,
         'hud_registry_sha256': hashlib.sha256((ROOT / 'registry/hud.json').read_bytes()).hexdigest(),
         'source_inputs_sha256': expected_inputs,
         'unchanged_sample_values_except_sampled_rpm_tip': True,

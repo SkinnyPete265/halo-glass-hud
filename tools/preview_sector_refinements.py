@@ -5,7 +5,8 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from halo import artwork as art, material as mat, preview_instruments as hud, sectors
+from halo import (artwork as art, layout as geo, material as mat,
+                  preview_instruments as hud, sectors)
 
 
 def main():
@@ -14,11 +15,16 @@ def main():
     times=('27.628','18.159','33.366')
     colours=('yellow','green','purple')
     panels=[('v0.4.0',previous)]
+    background_extended=Image.new('RGBA',(background.width,
+                                          background.height+round(geo.ARTWORK_TOP_PADDING)))
+    background_extended.alpha_composite(background,(0,round(geo.ARTWORK_TOP_PADDING)))
     for title,fraction in (('Tiny outer-glow lift',sectors.DECIMAL_BASELINE_FRACTION),
                            ('Centred separator option',0.)):
         image=hud.static_base().copy()
-        sectors.draw(image,times,colours,decimal_fraction=fraction)
-        panels.append((title,Image.alpha_composite(background,art.finish(image))))
+        overlay=art.canvas()
+        sectors.draw(overlay,times,colours,decimal_fraction=fraction)
+        image.alpha_composite(overlay,(0,round(geo.ARTWORK_TOP_PADDING*art.S)))
+        panels.append((title,Image.alpha_composite(background_extended,art.finish(image))))
     sheet=Image.new('RGB',(1450,690),(24,39,49))
     draw=ImageDraw.Draw(sheet)
     for index,(title,image) in enumerate(panels):

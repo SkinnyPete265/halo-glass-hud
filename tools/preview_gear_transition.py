@@ -12,11 +12,13 @@ from halo import artwork as art, layout as geo, preview_instruments as hud
 def main():
     state = hud.State(speed=250, rpm=11585, gear=3, throttle=1., charge=.75, drs='hidden')
     base = hud.static_base().copy()
-    hud.draw_pedals(base, state)
-    hud.draw_pedal_labels(base)
-    hud.draw_battery(base, state.charge)
-    art.label(base, geo.SPEED, str(state.speed), weight=650)
-    base = hud.draw_rpm(base, state)
+    overlay = art.canvas()
+    hud.draw_pedals(overlay, state)
+    hud.draw_pedal_labels(overlay)
+    hud.draw_battery(overlay, state.charge)
+    art.label(overlay, geo.SPEED, str(state.speed), weight=650)
+    hud.draw_rpm(overlay, state)
+    base.alpha_composite(overlay, (0, round(geo.ARTWORK_TOP_PADDING * art.S)))
     crop = (745, 42, 1060, 350)
     font = ImageFont.truetype(str(ROOT / geo.FONT_PATH), 20)
     sequence = [(0., 3), (.45, 4), (.90, 5), (1.35, 6), (1.80, 7),
@@ -26,8 +28,12 @@ def main():
         time = index / 30.
         changed, gear = next(event for event in reversed(sequence) if time >= event[0])
         image = base.copy()
-        hud.draw_gears(image, replace(state, gear=gear, gear_age=time - changed))
-        image = art.finish(image).crop(crop).resize((630, 616), Image.Resampling.LANCZOS)
+        gear_layer = art.canvas()
+        hud.draw_gears(gear_layer, replace(state, gear=gear, gear_age=time - changed))
+        image.alpha_composite(gear_layer, (0, round(geo.ARTWORK_TOP_PADDING * art.S)))
+        shifted_crop = (crop[0], crop[1] + geo.ARTWORK_TOP_PADDING,
+                        crop[2], crop[3] + geo.ARTWORK_TOP_PADDING)
+        image = art.finish(image).crop(shifted_crop).resize((630, 616), Image.Resampling.LANCZOS)
         panel = Image.new('RGBA', (662, 700), (24, 39, 49, 255))
         panel.alpha_composite(image, (16, 50))
         draw = ImageDraw.Draw(panel)
@@ -44,8 +50,11 @@ def main():
     draw = ImageDraw.Draw(sheet)
     for index, elapsed in enumerate((0., .05, .15)):
         image = base.copy()
-        hud.draw_gears(image, replace(state, gear=4, gear_age=elapsed))
-        image = art.finish(image).crop((802, 70, 940, 235))
+        gear_layer = art.canvas()
+        hud.draw_gears(gear_layer, replace(state, gear=4, gear_age=elapsed))
+        image.alpha_composite(gear_layer, (0, round(geo.ARTWORK_TOP_PADDING * art.S)))
+        image = art.finish(image).crop((802, 70 + geo.ARTWORK_TOP_PADDING,
+                                        940, 235 + geo.ARTWORK_TOP_PADDING))
         image = image.resize((331, 396), Image.Resampling.LANCZOS)
         panel = Image.new('RGBA', image.size, (24, 39, 49, 255))
         panel.alpha_composite(image)

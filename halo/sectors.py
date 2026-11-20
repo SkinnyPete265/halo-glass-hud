@@ -4,6 +4,7 @@ from functools import lru_cache
 from PIL import Image, ImageDraw
 import math
 from . import layout as geo, material as mat
+from .tuning import rgb
 
 PREFIX = 'view_model_data.hud_halo_v2_sector_'
 COLOURS = {
@@ -46,19 +47,21 @@ class TextEffect:
 
 
 def effects(part, colour):
+    glow_scale = geo.STYLE['text_glow']
+    opacity = geo.STYLE['text_glow_strength'] / 100.0
     if part == 'prefix':
         # A 0.15-pixel spread and one alpha level give the requested tiny lift.
         size_ratio = FONT_SIZE / geo.UNIT_LABEL_SIZE
-        return tuple(TextEffect((radius*size_ratio+.15)*math.cos(index*math.tau/geo.RPM_LABEL_GLOW_SAMPLES),
-                                (radius*size_ratio+.15)*math.sin(index*math.tau/geo.RPM_LABEL_GLOW_SAMPLES),
-                                mat.UNIT_GLOW, (alpha+1)/255.)
+        return tuple(TextEffect((radius*size_ratio+.15)*glow_scale*math.cos(index*math.tau/geo.RPM_LABEL_GLOW_SAMPLES),
+                                (radius*size_ratio+.15)*glow_scale*math.sin(index*math.tau/geo.RPM_LABEL_GLOW_SAMPLES),
+                                mat.UNIT_GLOW, (alpha+1)/255.*opacity)
                      for radius,alpha in geo.RPM_LABEL_GLOW_RINGS
                      for index in range(geo.RPM_LABEL_GLOW_SAMPLES))
     tint = mat.UNIT_GLOW if colour == COLOURS['white'] else colour[:3]
-    bloom = tuple(TextEffect(1.35*math.cos(index*math.tau/3-math.pi/2),
-                            1.35*math.sin(index*math.tau/3-math.pi/2),tint,15/255.)
+    bloom = tuple(TextEffect(1.35*glow_scale*math.cos(index*math.tau/3-math.pi/2),
+                            1.35*glow_scale*math.sin(index*math.tau/3-math.pi/2),tint,15/255.*opacity)
                   for index in range(3))
-    return bloom + (TextEffect(0.,.35,(3,12,22),.40,1.04,-1),)
+    return bloom + (TextEffect(0.,.35,(3,12,22),.40*opacity,1.0+(.04*geo.STYLE['text_outline']),-1),)
 
 
 def surface_basis(x):
@@ -66,7 +69,7 @@ def surface_basis(x):
     depth = geo.RADIUS - math.sqrt(geo.RADIUS ** 2 - (x - geo.CX) ** 2)
     distance = PROJECTION_DISTANCE + depth
     perspective = PROJECTION_DISTANCE / distance
-    centre_y = geo.top(x) + geo.WING_HEIGHT / 2
+    centre_y = geo.top(x) + geo.WING_CENTER_OFFSET
     tangent_y = math.tan(math.radians(geo.angle(x)))
     return (
         perspective,
@@ -89,10 +92,18 @@ def decompose(basis):
     return math.degrees(outer), scale_x, scale_y, -math.degrees(axis)
 
 
+def glyph_basis(basis):
+    """Keep glyphs rigid while retaining the surface's local orientation."""
+    a, b, c, d = basis
+    orientation = math.atan2(c - b, a + d)
+    cosine, sine = math.cos(orientation), math.sin(orientation)
+    return cosine, -sine, sine, cosine
+
+
 
 def row_step():
     """One shared projected depth axis aligns the starts of all rows."""
-    basis = surface_basis(LEFT + PREFIX_ADVANCES[0] / 2)
+    basis = surface_basis(geo.wing_content_x(LEFT + PREFIX_ADVANCES[0] / 2))
     length = math.hypot(basis[1], basis[3])
     return ROW_GAP * basis[1] / length, ROW_GAP * basis[3] / length
 
@@ -100,11 +111,12 @@ def row_step():
 def anchor(row, part, index, decimal_fraction=None):
     advances = PREFIX_ADVANCES if part == 'prefix' else TIME_ADVANCES
     left = LEFT if part == 'prefix' else TIME_LEFT
-    rail_x = left + sum(advances[:index]) + advances[index] / 2
-    basis = surface_basis(rail_x)
+    source_x = left + sum(advances[:index]) + advances[index] / 2
+    rail_x = geo.wing_content_x(source_x)
     step_x, step_y = row_step()
     x = rail_x + (row - 1) * step_x
-    y = geo.top(rail_x) + geo.WING_HEIGHT / 2 + (row - 1) * step_y
+    basis = surface_basis(rail_x)
+    y = geo.top(rail_x) + geo.WING_CENTER_OFFSET + (row - 1) * step_y
     if part == 'time' and index == 2:
         # Apply the decimal baseline offset in the projected surface direction.
         fraction = DECIMAL_BASELINE_FRACTION if decimal_fraction is None else decimal_fraction
@@ -112,7 +124,7 @@ def anchor(row, part, index, decimal_fraction=None):
         x += basis[1] * offset
         y += basis[3] * offset
     # Every column shares the same slanted depth rail and row spacing.
-    return geo.Text(x, y, FONT_SIZE), basis
+    return geo.Text(x, y, FONT_SIZE * geo.STYLE['text_size'] / 100.0), basis
 
 
 def glyphs():
@@ -121,12 +133,18 @@ def glyphs():
         for index, character in enumerate(sector.upper() + ':'):
             spec, basis = anchor(row, 'prefix', index)
             yield Glyph(f'sector_{sector}_prefix_c{index}', spec, basis,
-                        COLOURS['white'], literal=character)
+                        _text_colour(COLOURS['white']), literal=character)
         for colour, tint in COLOURS.items():
             for index in range(len(TIME_ADVANCES)):
                 spec, basis = anchor(row, 'time', index)
                 name = f'{sector}_{colour}_c{index}'
-                yield Glyph('sector_' + name, spec, basis, tint, binding=PREFIX + name)
+                yield Glyph('sector_' + name, spec, basis, _text_colour(tint), binding=PREFIX + name)
+
+
+def _text_colour(colour):
+    if geo.STYLE['text_colour'] == '#ffffff':
+        return colour
+    return rgb(geo.STYLE['text_colour']) + (255,)
 
 
 def elements():
@@ -135,7 +153,7 @@ def elements():
         element = {
             'kind': 'text', 'id': glyph.name, 'style': 'OSD_24_bold',
             'align': 'centre', 'box': 15 * geo.HUD_SCALE / .30,
-            'cap_height': round(spec.size * .672 * geo.HUD_SCALE, 6),
+            'cap_height': round(spec.size * .672 * geo.HUD_SCALE * geo.STYLE['text_size'] / 100., 6),
             'at': geo.hud_point(spec.x, spec.y), 'rot': spec.rotation, 'layer': 26,
         }
         if glyph.binding:
@@ -147,7 +165,7 @@ def elements():
 
 @lru_cache(maxsize=64)
 def character_image(character):
-    font = mat.typeface(round(FONT_SIZE * mat.S), 650)
+    font = mat.typeface(round(FONT_SIZE * geo.STYLE['text_size'] / 100.0 * mat.S), 650)
     probe = ImageDraw.Draw(Image.new('L', (1, 1)))
     left, top, right, bottom = probe.textbbox((0, 0), character, font=font)
     image = Image.new('L', (right-left, bottom-top))
@@ -188,11 +206,12 @@ def draw(image, times, colours, lighting=True, decimal_fraction=None):
                 if character == ' ':
                     continue
                 spec, basis = anchor(row, part, index, decimal_fraction)
+                text_basis = glyph_basis(basis)
                 if lighting:
-                    a,b,c,d = basis
+                    a,b,c,d = text_basis
                     for effect in effects(part,tint):
                         position = geo.Text(spec.x+a*effect.x+b*effect.y,
                                             spec.y+c*effect.x+d*effect.y,spec.size)
-                        scaled = tuple(value*effect.scale for value in basis)
+                        scaled = tuple(value*effect.scale for value in text_basis)
                         draw_character(image,character,position,scaled,effect.colour+(255,),effect.opacity)
-                draw_character(image, character, spec, basis, tint)
+                draw_character(image, character, spec, text_basis, tint)

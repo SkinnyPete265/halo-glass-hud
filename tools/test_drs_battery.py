@@ -6,14 +6,15 @@ from pathlib import Path
 import sys
 import unittest
 import uuid
-from PIL import Image
+from unittest.mock import patch
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 import prepare_runtime
 import native_interop as native
 from formats import erpw,idf,pkg,uinode as N,uiops as U
-from halo import layout as geo
+from halo import artwork as art, feature_assets, layout as geo, material as mat
 
 
 class InstrumentRefinementTests(unittest.TestCase):
@@ -92,6 +93,250 @@ class InstrumentRefinementTests(unittest.TestCase):
         self.assertGreater(geo.BATTERY_CORNER_RADIUS/geo.BATTERY_HEIGHT,.25)
         with Image.open(ROOT/self.record['sprites']['battery_bolt']['png']) as image:
             self.assertGreaterEqual(image.height,geo.BATTERY_TEXTURE_RESOLUTION*9)
+
+    def test_filtered_battery_frame_keeps_the_original_terminal_gap(self):
+        cx,cy=geo.BATTERY_CENTRE
+        left,right=cx-geo.BATTERY_WIDTH/2,cx+geo.BATTERY_WIDTH/2
+        top,bottom=cy-geo.BATTERY_HEIGHT/2,cy+geo.BATTERY_HEIGHT/2
+        box=(round(left*art.S),round(top*art.S),
+             round(right*art.S),round(bottom*art.S))
+        frame_source=Image.new('L',(geo.WIDTH*art.S,geo.HEIGHT*art.S))
+        ImageDraw.Draw(frame_source).rounded_rectangle(
+            box,radius=geo.BATTERY_CORNER_RADIUS*art.S,outline=225,width=art.S)
+        terminal_source=Image.new('L',frame_source.size)
+        ImageDraw.Draw(terminal_source).rounded_rectangle(
+            ((right+1)*art.S,(cy-3)*art.S,(right+4)*art.S,(cy+3)*art.S),
+            radius=2*art.S,fill=180)
+        centre_y=round(cy*art.S)
+        frame_x=[x for x in range(round(right*art.S)-art.S*2,
+                                  round(right*art.S)+art.S*2+1)
+                 if frame_source.getpixel((x,centre_y))]
+        terminal_x=[x for x in range(round(right*art.S)-art.S*2,
+                                     round((right+4)*art.S)+1)
+                    if terminal_source.getpixel((x,centre_y))]
+        gap=range(max(frame_x)+1,min(terminal_x))
+        self.assertEqual(len(gap),2)
+
+        filtered=feature_assets.battery_layers()['frame'].getchannel('A')
+        top,bottom=terminal_source.getbbox()[1::2]
+        for y in range(top,bottom):
+            for x in gap:
+                self.assertEqual(filtered.getpixel((x,y)),0,(x,y))
+        self.assertGreater(filtered.getpixel((gap.start-1,centre_y)),0)
+        self.assertGreater(filtered.getpixel((gap.stop,centre_y)),0)
+
+    def test_idle_slats_keep_ten_distinct_filtered_lines_per_bank(self):
+        layer=art._idle_slats_layer()
+        alpha=layer.getchannel('A')
+        self.assertEqual(alpha.getextrema(),(0,55))
+        self.assertEqual(layer.size,(geo.WIDTH*art.S,geo.HEIGHT*art.S))
+        for side in (-1,1):
+            centres=[]
+            for index in range(10):
+                points=geo.slat_points(side,index)
+                x=round(sum(point[0] for point in points)/len(points)*art.S)
+                y=round(sum(point[1] for point in points)/len(points)*art.S)
+                centres.append((x,y))
+                self.assertEqual(layer.getpixel((x,y)),(126,176,187,55))
+            for first,second in zip(centres,centres[1:]):
+                x=round((first[0]+second[0])/2)
+                y=round((first[1]+second[1])/2)
+                self.assertEqual(alpha.crop((x-1,y-1,x+2,y+2)).getextrema(),(0,0))
+
+    def test_filtered_circle_and_arc_keep_core_coverage_at_endpoints(self):
+        captured=[]
+        compose=mat._compose_stroke_mask
+        def capture(image,mask,offset,color,glow,prefilter_core=False):
+            if prefilter_core:
+                captured.append((mask.copy(),offset))
+            return compose(image,mask,offset,color,glow,prefilter_core)
+        blank=Image.new('RGBA',(geo.WIDTH*art.S,geo.HEIGHT*art.S))
+        with patch.object(mat,'_compose_stroke_mask',side_effect=capture):
+            mat.circle_stroke(blank,(geo.CX,geo.CY),89.,(150,210,238,170),.8,0.,
+                              prefilter_core=True)
+            mat.arc_stroke(blank,(geo.CX,geo.CY),61.,140.,400.,mat.WHITE+(230,),
+                           1.6,0.,prefilter_core=True)
+        self.assertEqual(len(captured),2)
+        for mask,_ in captured:
+            bounds=mask.getbbox()
+            self.assertIsNotNone(bounds)
+            self.assertGreaterEqual(bounds[0],1)
+            self.assertGreaterEqual(bounds[1],1)
+            self.assertGreaterEqual(mask.width-bounds[2],1)
+            self.assertGreaterEqual(mask.height-bounds[3],1)
+            self.assertGreater(max(mat._box_filter_alpha_3x3(mask).getdata()),0)
+        arc,offset=captured[1]
+        for angle in (140.,400.):
+            radians=math.radians(angle)
+            endpoint=(geo.CX+61.*math.cos(radians),geo.CY+61.*math.sin(radians))
+            found=False
+            for y in range(arc.height):
+                for x in range(arc.width):
+                    px=(offset[0]+x+.5)/art.S
+                    py=(offset[1]+y+.5)/art.S
+                    if math.hypot(px-endpoint[0],py-endpoint[1])<=1.2 and arc.getpixel((x,y))>0:
+                        found=True
+                        break
+                if found:
+                    break
+            self.assertTrue(found,f'Arc endpoint at {angle:g} degrees was clipped')
+
+    def test_b_and_b_plus_change_only_glow_layer_count(self):
+        core_keys=('outline_width','outline_alpha','reflection_alpha','reflection_sigma',
+                   'tail_alpha','tail_radius','tail_sigma')
+        self.assertEqual({key:mat.RACE_EDGE_VARIANTS['B'][key] for key in core_keys},
+                         {key:mat.RACE_EDGE_VARIANTS['B+'][key] for key in core_keys})
+        for key in ('edge_glow_layers','outline_glow_layers','circle_glow_layers'):
+            self.assertEqual(mat.RACE_EDGE_VARIANTS['B'][key],1)
+            self.assertEqual(mat.RACE_EDGE_VARIANTS['B+'][key],2)
+            self.assertEqual(mat.RACE_EDGE_VARIANTS['B+3'][key],3)
+            self.assertEqual(mat.RACE_EDGE_VARIANTS['B+4'][key],4)
+        for name in ('B+3','B+4'):
+            self.assertEqual({key:mat.RACE_EDGE_VARIANTS['B+'][key]
+                              for key in core_keys},
+                             {key:mat.RACE_EDGE_VARIANTS[name][key]
+                              for key in core_keys})
+            for key in ('edge_glow_alpha','edge_glow_sigma','outline_glow_alpha',
+                        'outline_glow_sigma','circle_glow_alpha','circle_glow_sigma'):
+                self.assertEqual(mat.RACE_EDGE_VARIANTS['B+'][key],
+                                 mat.RACE_EDGE_VARIANTS[name][key])
+        self.assertEqual(mat.DEFAULT_RACE_EDGE_VARIANT,'B+4')
+
+    def test_drs_rails_and_fade_end_at_the_wing_face_tip(self):
+        from halo import drs_motion
+        self.assertEqual(geo.DRS_RAIL_END,geo.WING_FACE_END)
+        for edge in geo.DRS_RAIL_EDGES:
+            points=geo.drs_rail_points(edge)
+            self.assertEqual(points[-1][0],round(geo.WING_FACE_END))
+        feature_assets.drs_clip_mask.cache_clear()
+        fade=feature_assets.drs_clip_mask()
+        before=round((geo.WING_FACE_END-16.)*art.S)
+        tip=round(geo.WING_FACE_END*art.S)
+        after=round((geo.WING_FACE_END+1.)*art.S)
+        self.assertGreater(fade.getpixel((before,round(geo.CY*art.S))),0)
+        self.assertEqual(fade.getpixel((tip,round(geo.CY*art.S))),0)
+        self.assertEqual(fade.getpixel((after,round(geo.CY*art.S))),0)
+        self.assertEqual(drs_motion.rail_limits(),(geo.DRS_RAIL_START,geo.WING_FACE_END))
+        self.assertGreater(drs_motion.window_centre(1.),
+                           geo.WING_FACE_END-geo.CX)
+        rails=feature_assets.drs_rails().getchannel('A')
+        for side in (-1,1):
+            face_tip=round((geo.CX+side*(geo.WING_FACE_END-geo.CX))*art.S)
+            near_tip=round((geo.CX+side*(geo.WING_FACE_END-8.-geo.CX))*art.S)
+            self.assertGreater(rails.crop((near_tip,0,near_tip+1,rails.height)).getextrema()[1],0)
+            beyond=min(rails.width-1,face_tip+side)
+            self.assertEqual(rails.crop((beyond,0,beyond+1,rails.height)).getextrema(),(0,0))
+
+    def test_drs_sweep_uses_and_invalidates_live_wing_geometry(self):
+        from halo import drs_motion
+        original=dict(geo.STYLE)
+        original_end=geo.WING_FACE_END
+        previous_side=drs_motion.side_surface('right').tobytes()
+        try:
+            geo.refresh_style(dict(original,wing_extension=original['wing_extension']+12))
+            mat.sync_layout()
+            feature_assets.drs_clip_mask.cache_clear()
+            feature_assets.drs_rails.cache_clear()
+            drs_motion.invalidate()
+            self.assertEqual(drs_motion.rail_limits(),
+                             (geo.DRS_RAIL_START,geo.WING_FACE_END))
+            self.assertAlmostEqual(geo.WING_FACE_END-original_end,12.)
+            self.assertAlmostEqual(drs_motion.window_centre(1.)-
+                                   drs_motion.window_centre(0.),
+                                   geo.WING_FACE_END-geo.DRS_RAIL_START+
+                                   2*drs_motion.END_MARGIN+drs_motion.WINDOW_WIDTH)
+            self.assertEqual(drs_motion.surface().size,
+                             (geo.WIDTH*art.S,geo.HEIGHT*art.S))
+            self.assertEqual(drs_motion.side_surface('right').size,
+                             (geo.WIDTH*art.S,geo.HEIGHT*art.S))
+            self.assertNotEqual(drs_motion.side_surface('right').tobytes(),previous_side)
+        finally:
+            geo.refresh_style(original)
+            mat.sync_layout()
+            feature_assets.drs_clip_mask.cache_clear()
+            feature_assets.drs_rails.cache_clear()
+            drs_motion.invalidate()
+
+    def test_both_dial_drs_crops_reveal_and_sweep_reach_face_tip(self):
+        from halo import drs_motion
+        registry=json.loads((ROOT/'registry/hud.json').read_text())['hud.element']
+        expected=(geo.WING_FACE_END-geo.CX)*geo.HUD_SCALE
+
+        def descendants(items):
+            for item in items:
+                yield item
+                yield from descendants(item.get('children',[]))
+
+        for dial_name in ('glass_dial','glass_dial_26'):
+            with self.subTest(dial=dial_name):
+                record=registry[dial_name]
+                bounds={name:record['sprites'][name]['bounds']
+                        for name in ('drs_left','drs_right')}
+                self.assertLessEqual(abs(bounds['drs_right'][2]-expected),
+                                     geo.HUD_SCALE+1e-4)
+                self.assertLessEqual(abs(bounds['drs_left'][0]+expected),
+                                     geo.HUD_SCALE+1e-4)
+                group=next(item for item in descendants(record['elements'])
+                           if item.get('id')=='drs_open')
+                elements={item['id']:item for item in descendants(group.get('children',[]))}
+                right=elements['drs_right']
+                right_half=right['window'][0]/2
+                self.assertAlmostEqual(right['path'][0][0]+right_half,
+                                       bounds['drs_right'][0],places=5)
+                self.assertLessEqual(abs(right['path'][1][0]+right_half-expected),
+                                     geo.HUD_SCALE+1e-4)
+                left=elements['drs_left']
+                left_half=left['window'][0]/2
+                self.assertAlmostEqual(left['path'][0][0]-left_half,
+                                       bounds['drs_left'][2],places=5)
+                self.assertLessEqual(abs(left['path'][1][0]-left_half+expected),
+                                     geo.HUD_SCALE+1e-4)
+                for side,sign in (('right',1),('left',-1)):
+                    sweep=elements['drs_sweep_'+side]
+                    for phase,point in zip((0.,1.),sweep['path']):
+                        wanted=geo.hud_point(
+                            geo.CX+sign*drs_motion.window_centre(phase),0.
+                        )[0]
+                        self.assertAlmostEqual(point[0],wanted,places=5)
+                    face_tip=geo.CX+sign*(geo.WING_FACE_END-geo.CX)
+                    sweep_end=geo.CX+sign*drs_motion.window_centre(1.)
+                    self.assertGreater(sign*(sweep_end-face_tip),0.)
+
+    def test_active_pedal_masks_keep_slat_interiors_and_clear_gaps(self):
+        from halo import preview_instruments as hud
+        runtime_masks={side:feature_assets.pedal_mask(side).getchannel('A')
+                       for side in (-1,1)}
+        self.assertEqual(runtime_masks[-1].tobytes(),
+                         runtime_masks[1].transpose(Image.Transpose.FLIP_LEFT_RIGHT).tobytes())
+        for side in (-1,1):
+            runtime=runtime_masks[side]
+            texture,position=hud.pedal_surface('brake' if side<0 else 'throttle')
+            preview=texture.getchannel('A')
+            centres=[]
+            for index in range(10):
+                points=geo.slat_points(side,index)
+                x=sum(point[0] for point in points)/len(points)
+                y=sum(point[1] for point in points)/len(points)
+                px=round((.5+(x-geo.CX)/geo.PEDAL_MASK_SPAN)*runtime.width-.5)
+                py=round((.5+(y-geo.CY)/geo.PEDAL_MASK_SPAN)*runtime.height-.5)
+                self.assertGreaterEqual(runtime.getpixel((px,py)),250)
+                preview_x=round(x*art.S)-position[0]
+                preview_y=round(y*art.S)-position[1]
+                self.assertEqual(preview.getpixel((preview_x,preview_y)),255)
+                centres.append((x,y))
+            for first,second in zip(centres,centres[1:]):
+                x=(first[0]+second[0])/2
+                y=(first[1]+second[1])/2
+                px=round((.5+(x-geo.CX)/geo.PEDAL_MASK_SPAN)*runtime.width-.5)
+                py=round((.5+(y-geo.CY)/geo.PEDAL_MASK_SPAN)*runtime.height-.5)
+                # The native UV frame is only 1.64 mask texels per art pixel;
+                # its Lanczos footprint can leave a faint antialias fringe.
+                # Keep the centre of every inter-slat gap effectively clear.
+                self.assertLessEqual(runtime.getpixel((px,py)),16)
+                preview_x=round(x*art.S)-position[0]
+                preview_y=round(y*art.S)-position[1]
+                self.assertEqual(preview.crop((preview_x-1,preview_y-1,
+                                               preview_x+2,preview_y+2)).getextrema(),(0,0))
 
     def test_rpm_tip_profile_is_rounded_and_follows_the_arc(self):
         from halo import rpm_mask

@@ -22,7 +22,7 @@ def record_for_2026(shared):
 
     def text(name, literal=None, value=None, size=17.5, style='OSD_24_bold'):
         result = {'kind':'text', 'id':name, 'style':style, 'align':'centre',
-                  'cap_height':round(size*.672*geo.HUD_SCALE,6), 'layer':27}
+                  'cap_height':round(size*.672*geo.HUD_SCALE*geo.STYLE['text_size']/100.,6), 'layer':27}
         result['literal' if literal is not None else 'value'] = literal if literal is not None else value
         return result
 
@@ -47,15 +47,15 @@ def record_for_2026(shared):
              'visible':{'path':'is_xm_available','ty':'bool'},'children':[ready]}]})
 
     # Temporary, intentionally compact state checks in the unused inner left wing.
-    x=335.
+    x,y=geo.wing_content_point(335.,geo.top(335.))
     for active in (False,True):
         item=text('overtake_'+('on' if active else 'off'),
                   'OVERTAKE ON' if active else 'OVERTAKE OFF',size=13.)
-        item.update(at=geo.hud_point(x,geo.top(x)+50.),rot=-16.,
+        item.update(at=geo.hud_point(x,y+50.),rot=-16.,
                     visible={'game':'om_active','not':not active})
         record['elements'].append(item)
     for state,caption in BOOST_STATES.items():
         item=text('boost_text_'+state,caption,size=13.)
         record['elements'].append({'kind':'group','id':'boost_'+state,
-            'at':geo.hud_point(x,geo.top(x)+76.),'rot':-16.,'children':[item]})
+            'at':geo.hud_point(x,y+76.),'rot':-16.,'children':[item]})
     return record

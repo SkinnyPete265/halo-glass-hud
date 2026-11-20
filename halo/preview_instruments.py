@@ -33,9 +33,9 @@ def clamp(value):
 
 
 
-@lru_cache(maxsize=1)
-def static_base():
-    return art.base()
+@lru_cache(maxsize=5)
+def static_base(race_variant=None):
+    return art.base(race_variant)
 
 @lru_cache(maxsize=2)
 def pedal_surface(side):
@@ -45,34 +45,41 @@ def pedal_surface(side):
     top = math.floor(min(y for x, y in points) * S)
     right = math.ceil(max(x for x, y in points) * S) + 1
     bottom = math.ceil(max(y for x, y in points) * S) + 1
-    mask = Image.new("L", (right - left, bottom - top))
+    pad = 1
+    mask = Image.new("L", (right - left + 2 * pad, bottom - top + 2 * pad))
     draw = ImageDraw.Draw(mask)
     for index in range(10):
-        draw.polygon([(round(x * S) - left, round(y * S) - top)
+        draw.polygon([(round(x * S) - left + pad, round(y * S) - top + pad)
                       for x, y in geo.slat_points(sign, index)], fill=255)
+    mask = mat._box_filter_alpha_3x3(mask)
     colour = PEDAL_COLOURS[side]
     amplitude = tuple(min(c * .16, (255 - c) * .80) for c in colour)
     texture = Image.new("RGBA", mask.size)
     pixels = []
     for y in range(texture.height):
-        v = (y + .5) / texture.height
+        v = (y - pad + .5) / (bottom - top)
         for x in range(texture.width):
-            u = (x + .5) / texture.width
+            u = (x - pad + .5) / (right - left)
             sheen = .30 * math.cos(2 * math.pi * (u - .15))
             sheen += .70 * math.cos(2 * math.pi * (v - .35))
             pixels.append(tuple(round(c + a * sheen)
                                 for c, a in zip(colour, amplitude)) + (255,))
     texture.putdata(pixels)
     texture.putalpha(mask)
-    return texture, (left, top)
+    return texture, (left - pad, top - pad)
 
 def draw_pedals(image, state):
     for side, fraction in (("brake", state.brake), ("throttle", state.throttle)):
         source, position = pedal_surface(side)
         fill = source.copy()
-        cutoff = round(fill.height * (1.0 - clamp(fraction)))
         alpha = fill.getchannel("A")
-        alpha.paste(0, (0, 0, fill.width, cutoff))
+        if fraction <= 0.:
+            alpha.paste(0, (0, 0, fill.width, fill.height))
+        elif fraction < 1.:
+            pad = 1
+            content_height = fill.height - 2 * pad
+            cutoff = pad + round(content_height * (1.0 - clamp(fraction)))
+            alpha.paste(0, (0, 0, fill.width, cutoff))
         fill.putalpha(alpha)
         image.alpha_composite(fill, position)
 
@@ -211,14 +218,16 @@ def draw_drs(image, state, pulse=1.0, reveal=1.0):
     elif state.drs != "hidden":
         raise ValueError(f"Unknown DRS preview state {state.drs}")
 
-def render(state, pulse=1.0, reveal=1.0):
-    image = static_base().copy()
-    sectors.draw(image, state.sector_times, state.sector_colours)
-    draw_pedals(image, state)
-    draw_pedal_labels(image)
-    draw_battery(image, clamp(state.charge))
-    draw_gears(image, state)
-    art.label(image, geo.SPEED, str(state.speed), weight=650)
-    image = draw_rpm(image, state)
-    draw_drs(image, state, pulse, reveal)
-    return art.finish(image)
+def render(state, pulse=1.0, reveal=1.0, race_variant=None):
+    image = static_base(race_variant).copy()
+    overlay = art.canvas()
+    sectors.draw(overlay, state.sector_times, state.sector_colours)
+    draw_pedals(overlay, state)
+    draw_pedal_labels(overlay)
+    draw_battery(overlay, clamp(state.charge))
+    draw_gears(overlay, state)
+    art.label(overlay, geo.SPEED, str(state.speed), weight=650)
+    overlay = draw_rpm(overlay, state)
+    draw_drs(overlay, state, pulse, reveal)
+    image.alpha_composite(overlay, (0, round(geo.ARTWORK_TOP_PADDING * S)))
+    return mat.preview_finish(image)

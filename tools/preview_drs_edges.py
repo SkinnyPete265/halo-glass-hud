@@ -26,7 +26,8 @@ def overlay(rails, highlight, elapsed, duration, flow_delay, active_end=1.6, rai
     reveal = (1. - hud.clamp((elapsed - active_end) / geo.DRS_CLOSE_DURATION) ** 2
               if closing else ease_out(elapsed / duration))
     pulse = 1. if closing else .87 + .13 * math.cos(math.pi * max(0., elapsed - duration) / .6)
-    limit = rail_start - geo.CX + (drs_motion.OUTER_X - rail_start) * reveal
+    outer_x = drs_motion.rail_limits()[1]
+    limit = rail_start - geo.CX + (outer_x - rail_start) * reveal
     row = Image.new('L', (rails.width, 1))
     coverage = [hud.clamp((limit + 2. - abs(x / art.S - geo.CX)) / 4.) for x in range(rails.width)]
     row.putdata([round(255 * value * pulse * reveal) for value in coverage])
@@ -39,7 +40,7 @@ def overlay(rails, highlight, elapsed, duration, flow_delay, active_end=1.6, rai
     if not closing and elapsed >= flow_delay:
         phase = ((elapsed - flow_delay) % drs_motion.PERIOD) / drs_motion.PERIOD
         start = rail_start - geo.CX - drs_motion.END_MARGIN - drs_motion.WINDOW_WIDTH / 2
-        end = drs_motion.OUTER_X - geo.CX + drs_motion.END_MARGIN + drs_motion.WINDOW_WIDTH / 2
+        end = outer_x - geo.CX + drs_motion.END_MARGIN + drs_motion.WINDOW_WIDTH / 2
         centre = start + (end - start) * phase
         row.putdata([round(255 * drs_motion.mask_weight(
             .5 + (abs(x / art.S - geo.CX) - centre) / drs_motion.WINDOW_WIDTH) * pulse * reveal)
