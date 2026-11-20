@@ -70,11 +70,23 @@ Native Alpha overrides cap effect opacity independently of the main text.
 Pending times show white --.--- placeholders. Completed times use yellow,
 green or purple according to the earlier split-event comparison rules.
 
-native/src/sector_times.cpp ports the verified Sess_LapTimes_ReportSplit hook
-with its existing guarded memory offsets. SWOFTY 1.9 live state supplies the
-player and session generation. Typed HUD leaves publish all timing cells as
-one transaction and resynchronize after HUD recreation. Colour comparisons
-learn personal and session bests from observed splits in the current session.
+On the two recognized executables, sector timing prefers SWOFTY Live table v6
+when the player's `car_detail` has `SWOFTY_LIVE_HAVE_LAP_TIMES`. The current
+record supplies S1/S2. The preceding record supplies S3 when the completed-lap
+counter advances. S3 stays visible until the next observed player split.
+First samples and discontinuities establish a baseline. Colour comparisons
+learn personal and session bests from observed player and rival splits.
+Typed HUD leaves publish the timing cells together and resynchronize after HUD
+recreation. The HUD uses game-memory-backed state with UDP disabled.
+
+The existing verified reader supplies splits on older cores or when its gate
+arrives before live timing is available. After selecting Live, the comparison
+reader only contributes diagnostics. In `loader.log`, search for
+`[halo-v2-sectors]` to see the provider, player gates (one-based lap and
+milliseconds), unmatched gates after two seconds, and paired times differing
+by more than one millisecond. Live SDK headers are pinned in
+`native/include/source.json`. The addon ABI remains 9.
+[SWOFTY Live timing contract](https://f1.swofty.net/reference/std/live.html#car-detail)
 
 The reader and focused state/publication tests compile and pass offline.
 The user confirmed v0.4.0's in-game sector display and approved its appearance.
@@ -164,7 +176,8 @@ Launcher and store paths are configurable through project.local.json and CLI opt
 - native/reference/sector_reader.cpp preserves the earlier reader source.
 - halo/sectors.py supplies the shared sector character layout and bindings.
 - native/src/sector_state.hpp supplies split classification and atomic publication.
-- native/src/sector_times.cpp reads the verified split event and tracks session context.
+- native/src/sector_times.cpp connects the Live frame callback and guarded split event.
+- native/src/live_sectors.hpp tracks providers, lap transitions and comparison diagnostics.
 
 Python 3.14, Pillow, SWOFTY and Zig are used locally. Run from this project folder.
 

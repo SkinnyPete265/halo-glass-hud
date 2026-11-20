@@ -1,4 +1,4 @@
-"""Fetch only the SWOFTY headers this project needs, pinned to v1.9.0."""
+"""Fetch the project's SWOFTY SDK headers at the recorded upstream revision."""
 import hashlib
 import json
 import re
@@ -7,7 +7,9 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / "native" / "include"
-BASE = "https://raw.githubusercontent.com/Swofty-Developments/SwoftyLauncher/v1.9.0/"
+TAG = "v1.10.11"
+REVISION = "c7fc9dffeff94fc65339b5584171bd5b5bd0071a"
+BASE = f"https://raw.githubusercontent.com/Swofty-Developments/SwoftyLauncher/{REVISION}/"
 HEADERS = ["swofty/events.hpp", "swofty/mixin.hpp", "swofty/hud_leaves.hpp",
            "swofty/live.hpp", "swofty/fake_hud.hpp", "swofty/fake_live.hpp"]
 
@@ -34,7 +36,7 @@ def main():
     (DEST / "LICENSE").write_bytes(license_data)
     (DEST / "source.json").write_text(json.dumps({
         "repository": "Swofty-Developments/SwoftyLauncher",
-        "tag": "v1.9.0", "sha256": dict(sorted(fetched.items())),
+        "tag": TAG, "revision": REVISION, "sha256": dict(sorted(fetched.items())),
         "license": {"path": "LICENSE", "url": license_url,
                     "sha256": hashlib.sha256(license_data).hexdigest()}
     }, indent=2) + "\n", encoding="utf-8")

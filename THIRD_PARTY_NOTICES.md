@@ -14,11 +14,11 @@ notice and GNU AGPL terms. That notice is preserved with the source.
 
 ## SWOFTY SDK
 
-native/include/source.json records the SWOFTY v1.9.0 repository tag and SHA-256
+native/include/source.json records the SWOFTY v1.10.11 tag, commit and SHA-256
 hashes for the included headers. The SDK is MIT-licensed. Its SDK-specific notice
 is bundled in native/include/LICENSE, with its source URL and hash in source.json.
 The SDK fetch helper retrieves that same package-level notice.
-[Upstream SDK licence](https://github.com/Swofty-Developments/SwoftyLauncher/blob/v1.9.0/packages/sdk/LICENSE).
+[Upstream SDK licence](https://github.com/Swofty-Developments/SwoftyLauncher/blob/v1.10.11/packages/sdk/LICENSE).
 
 ## Saira
 
