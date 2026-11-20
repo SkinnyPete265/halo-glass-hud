@@ -1,6 +1,7 @@
-// AGPL-3.0-or-later. Uses the previously verified F1 25 split-event layout.
+// AGPL-3.0-or-later. Uses the verified F1 25 split-event layouts.
 #include <swofty_api.h>
 #include <swofty/live.hpp>
+#include <halo/sector_builds.hpp>
 #include <windows.h>
 #include <cmath>
 #include <cstdint>
@@ -31,8 +32,9 @@ bool build_matches()
     if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew < 0 || dos->e_lfanew > 0x1000)
         return false;
     auto *nt = reinterpret_cast<const IMAGE_NT_HEADERS64 *>(base + dos->e_lfanew);
-    return nt->Signature == IMAGE_NT_SIGNATURE && nt->FileHeader.TimeDateStamp == 1789118616u &&
-           nt->OptionalHeader.SizeOfImage == 0x193e6000u;
+    return nt->Signature == IMAGE_NT_SIGNATURE &&
+           halo::supports_sector_reader(nt->FileHeader.TimeDateStamp,
+                                        nt->OptionalHeader.SizeOfImage);
 }
 
 bool context()

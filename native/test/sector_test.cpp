@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdio>
 #include <string>
+#include <halo/sector_builds.hpp>
 #include <swofty/fake_hud.hpp>
 #include "../src/sector_state.hpp"
 
@@ -15,6 +16,13 @@ std::string time(const swofty::fake::Hud &hud, int sector, const char *colour)
 
 int main()
 {
+    assert(halo::supports_sector_reader(1789118616u, 0x193e6000u));
+    assert(halo::supports_sector_reader(1794312636u, 0x18434000u));
+    assert(!halo::supports_sector_reader(1794312636u, 0x193e6000u));
+    assert(!halo::supports_sector_reader(1789118616u, 0x18434000u));
+    assert(!halo::supports_sector_reader(1794312635u, 0x18434000u));
+    assert(!halo::supports_sector_reader(0u, 0u));
+
     swofty::fake::Hud hud;
     halo::SectorState state;
     halo::SectorHud publisher;
