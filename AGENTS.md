@@ -64,8 +64,8 @@ paths come from the ignored `project.local.json`.
 - For a GitHub candidate, dispatch Local release from main with the exact
   approved commit and requested mode. An approval during an install review
   authorizes that install. A design or code review approval accepts the
-  changes only. Use install-and-smoke when a boot test is also requested.
-  Report the local result after hosted checks pass.
+  changes only. Use the install mode for test builds and report the result
+  after exact-cache verification. The owner starts F1 25 manually for testing.
 - The release helper handles composition, validation, package reuse, rollback,
   the profile snapshot and exact-cache verification. If F1 25 is open, finish
   preparation, then resume with the same command after normal game closure.

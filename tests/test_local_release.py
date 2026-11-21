@@ -1,4 +1,4 @@
-"""Regression checks for dispatch authorization, retries and boot evidence."""
+"""Regression checks for dispatch authorization, retries and release results."""
 
 from pathlib import Path
 import subprocess
@@ -9,13 +9,12 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import local_release as worker
-import project
 
 
 def dispatch(**fields):
     return {
         "id": 123,
-        "display_title": f"Halo local release {'a' * 40} install-and-smoke",
+        "display_title": f"Halo local release {'a' * 40} install",
         "event": "workflow_dispatch",
         "head_branch": worker.BRANCH,
         "head_repository": {"full_name": worker.REPOSITORY},
@@ -45,6 +44,7 @@ class LocalReleaseTests(unittest.TestCase):
             {"triggering_actor": {"login": "other"}},
             {"head_sha": "main"},
             {"display_title": "Halo local release main install"},
+            {"display_title": f"Halo local release {'a' * 40} install-and-smoke"},
         ):
             with self.subTest(fields=fields):
                 self.assertIsNone(worker.enrolled_job(dispatch(**fields)))
@@ -55,7 +55,7 @@ class LocalReleaseTests(unittest.TestCase):
         worker.process(self.home, [dispatch(status="in_progress"), dispatch(id=124)])
         execute.assert_not_called()
         done = self.home / "jobs/123.json"
-        worker.write(done, {"status": "smoke_passed"})
+        worker.write(done, {"status": "cache_verified"})
         worker.process(self.home, [dispatch(), dispatch(id=124)])
         self.assertEqual(execute.call_args.args[1]["run"], 124)
 
@@ -81,38 +81,26 @@ class LocalReleaseTests(unittest.TestCase):
 
     @patch.object(worker, "prepare")
     @patch.object(worker.subprocess, "run")
-    def test_pass_structured_release_modes_and_record_failures(self, run, _prepare):
+    def test_package_and_install_stop_at_release_result(self, run, _prepare):
+        results = iter(("packaged", "cache_verified"))
+
         def release(command, **_kwargs):
             path = Path(command[command.index("--result") + 1])
-            worker.write(path, {"status": "smoke_failed"})
-            return subprocess.CompletedProcess(command, 1)
+            worker.write(path, {"status": next(results)})
+            return subprocess.CompletedProcess(command, 0)
 
         run.side_effect = release
-        path = self.home / "jobs/123.json"
-        worker.execute(self.home, worker.enrolled_job(dispatch()), None, path)
-        self.assertEqual(run.call_args.args[0][-2:], ["--install", "--smoke"])
-        self.assertEqual(worker.read(path)["status"], "smoke_failed")
-
-    @patch.object(project, "game_running", return_value=False)
-    @patch.object(project, "run")
-    def test_smoke_requires_evidence_and_never_takes_over(self, run, _busy):
-        settings = {"launcher": "swofty", "data_dir": "store", "game": "game"}
-        record = {"profile": "default", "status": "cache_verified"}
-        timings = project.Timings(self.home / "timings.json")
-        with self.assertRaisesRegex(RuntimeError, "without writing the smoke report"):
-            project.boot_smoke(settings, self.home, timings, record)
-        self.assertEqual(record["status"], "smoke_failed")
-        report = Path(record["smoke_report"])
-        report.parent.mkdir()
-        worker.write(report, {"exit_code": 0, "tests": [{"id": "native_hud_boot", "status": "not_run"}]})
-        with self.assertRaisesRegex(RuntimeError, "did not confirm a passing Halo boot"):
-            project.boot_smoke(settings, self.home, timings, record)
-        worker.write(report, {"exit_code": 0, "tests": [{"id": "native_hud_boot", "status": "pass"}]})
-        project.boot_smoke(settings, self.home, timings, record)
-        self.assertEqual(record["status"], "smoke_passed")
-        command = run.call_args.args[0]
-        self.assertNotIn("--take-over", command)
-        self.assertEqual(command[-2:], ["--wait", "0"])
+        for mode, expected in (("package", "packaged"), ("install", "cache_verified")):
+            with self.subTest(mode=mode):
+                run.reset_mock()
+                path = self.home / "jobs/123.json"
+                job = worker.enrolled_job(dispatch(display_title=f"Halo local release {'a' * 40} {mode}"))
+                worker.execute(self.home, job, None, path)
+                run.assert_called_once()
+                command = run.call_args.args[0]
+                self.assertEqual(command[1:6], ["-B", "tools/project.py", "release", "--native", "--result"])
+                self.assertEqual(command[7:], ["--install"] if mode == "install" else [])
+                self.assertEqual(worker.read(path)["status"], expected)
 
 
 if __name__ == "__main__":

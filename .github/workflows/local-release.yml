@@ -15,7 +15,6 @@ on:
         options:
           - package
           - install
-          - install-and-smoke
 permissions:
   contents: read
 jobs:
@@ -35,7 +34,7 @@ jobs:
           [[ "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]]
           [[ "$ACTOR" == "$APPROVER" && "$TRIGGERING_ACTOR" == "$APPROVER" ]]
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
-          case "$MODE" in package|install|install-and-smoke) ;; *) exit 1 ;; esac
+          case "$MODE" in package|install) ;; *) exit 1 ;; esac
   checks:
     needs: authorize
     uses: ./.github/workflows/checks.yml

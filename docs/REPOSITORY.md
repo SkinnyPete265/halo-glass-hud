@@ -52,11 +52,10 @@ SHA before the Windows worker accepts the request.
 gh workflow run local-release.yml --ref main -f commit=<approved-sha> -f mode=install
 ```
 
-Use `package` for an offline package or `install-and-smoke` to boot F1 25 and
-check the installed addon. Have Steam open and signed in before requesting
-the boot test. Routine source checks never queue a local build.
+Use `package` for an offline package or `install` to install in SWOFTY and
+verify the exact cache. Routine source checks never queue a local build.
 The hosted run confirms the request is ready. The local worker reports the
-package, exact-cache and smoke results separately.
+package and exact-cache results. The owner starts F1 25 when ready to test.
 
 On the Windows release PC, check the local setup above and register the worker
 once from the development checkout:
@@ -119,7 +118,7 @@ can be added when the repository is public.
 
 - `halo/` holds shared HUD sources, `native/` the C++ publishers, SDK and
   captured build inputs, and `tools/` the build and release commands.
-- `tests/` holds the Python checks and SWOFTY smoke test. C++ fixtures live
+- `tests/` holds the Python checks. C++ fixtures live
   under `native/test/`.
 - `art/`, `registry/hud.json`, `runtime/` and `dist/` are generated.
 - `build/` holds working outputs and release evidence. New recovery packages
@@ -189,23 +188,10 @@ available for inspecting the most recent run.
 If the exact-cache check fails, the release also saves SWOFTY's profile report
 as conflicts.log. This reads the last build without rebuilding the profile.
 
-## In-game smoke test
+## Manual in-game verification
 
-Use the `install-and-smoke` workflow mode or append `--smoke` to
-`python -B tools/project.py release --install`. The test runs after exact-cache
-verification and saves its report and log with the release evidence. To run
-the boot check on an already installed build, use the configured SWOFTY
-executable and data directory:
-
-```powershell
-swofty --data-dir E:/Swofty test plan tests/halo-smoke.test.json
-swofty --data-dir E:/Swofty test run tests/halo-smoke.test.json --wait 0
-```
-
-This isolated boot test checks that the installed Halo DLL registers its frame
-callback and the game reaches the main menu without crashing. Keep the run
-report with the release evidence. Check split timing and visual changes
-separately in a UDP-off Time Trial session.
+Launch F1 25 through SWOFTY after the exact-cache check passes. Use that same
+session to check boot, split timing, and visual changes.
 
 For the Time Trial check, confirm UDP is off, drive one full flying lap,
 restart, then drive another. Compare splits with the game results and check

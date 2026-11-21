@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / "local" / "release-worker"
 SHA = re.compile(r"[0-9a-f]{40}")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-TITLE = re.compile(r"Halo local release ([0-9a-f]{40}) (package|install|install-and-smoke)")
+TITLE = re.compile(r"Halo local release ([0-9a-f]{40}) (package|install)")
 INPUTS = (
     Path("project.local.json"),
     Path("native/reference/native-controls.erpk"),
@@ -138,17 +138,15 @@ def execute(home, job, state, status_path):
             "tools/project.py", "release", "--native",
             "--result", str(result_path),
         ]
-        if job["mode"] != "package":
+        if job["mode"] == "install":
             command.append("--install")
-        if job["mode"] == "install-and-smoke":
-            command.append("--smoke")
         with (run_path / "release.log").open("ab") as log:
             result = subprocess.run(
                 command, cwd=checkout, stdout=log, stderr=subprocess.STDOUT, creationflags=NO_WINDOW,
             )
         release = read(result_path) if result_path.is_file() else {}
         status = release.get("status", "failed")
-        if result.returncode and status not in ("waiting_for_game_close", "smoke_failed"):
+        if result.returncode and status != "waiting_for_game_close":
             status = "failed"
         write(status_path, dict(job, status=status, updated=now(), release=release))
     except (OSError, ValueError, subprocess.CalledProcessError) as error:

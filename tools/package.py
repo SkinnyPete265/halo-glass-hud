@@ -16,7 +16,6 @@ SOURCE_FILES = (
     "native/include/LICENSE", "native/include/source.json",
     "native/reference/drs-template.bin", "native/reference/native-controls.erpk",
     "native/reference/native-controls-source.json", "native/reference/sector_reader.cpp",
-    "tests/halo-smoke.test.json",
     "tests/test_compatibility.py", "tests/test_composition_crop.py", "tests/test_devtools.py",
     "tests/test_drs_battery.py", "tests/test_local_release.py", "tests/test_wing_edge_stitch.py",
     "tests/test_workflow.py",

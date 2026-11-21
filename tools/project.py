@@ -117,7 +117,7 @@ def profile_enabled(path, addon):
     )
 
 
-def release(settings, manifest, args, *, smoke=False, result_path=None):
+def release(settings, manifest, args, *, result_path=None):
     runs = ROOT / "build/releases"
     runs.mkdir(parents=True, exist_ok=True)
     folder = Path(tempfile.mkdtemp(prefix="v" + manifest["version"] + "-", dir=runs))
@@ -141,8 +141,6 @@ def release(settings, manifest, args, *, smoke=False, result_path=None):
                 print(f"Warning: {warning}", file=sys.stderr, flush=True)
         prepare_release(settings, manifest, args, folder, timings, record)
         record["status"] = "cache_verified" if args.install else "packaged"
-        if smoke:
-            boot_smoke(settings, folder, timings, record)
     except Exception as error:
         record["error"] = str(error)
         raise
@@ -157,32 +155,6 @@ def release(settings, manifest, args, *, smoke=False, result_path=None):
         if timings.path.exists():
             shutil.copy2(timings.path, ROOT / "build/release-timings.json")
         print(f"Release evidence: {folder}")
-
-
-def boot_smoke(settings, folder, timings, record):
-    if game_running():
-        record["status"] = "waiting_for_game_close"
-        raise RuntimeError("Close F1 25 normally before starting the boot smoke test.")
-    record["status"] = "smoke_failed"
-    output = folder / "smoke"
-    record["smoke_report"] = str(output / "report.json")
-    cli = launcher_command(settings["launcher"], settings["data_dir"])
-    plan = str(ROOT / "tests/halo-smoke.test.json")
-    with timings.stage("boot smoke test"):
-        run(cli + [
-            "test", "run", plan, "--profile", record["profile"],
-            "--game", settings["game"], "--out", str(output), "--wait", "0",
-        ], folder / "smoke.log")
-        report_path = output / "report.json"
-        if not report_path.is_file():
-            raise RuntimeError("SWOFTY finished without writing the smoke report.")
-        report = read_json(report_path)
-        if report.get("exit_code") != 0 or not any(
-            test.get("id") == "native_hud_boot" and test.get("status") == "pass"
-            for test in report.get("tests", [])
-        ):
-            raise RuntimeError("The SWOFTY report did not confirm a passing Halo boot.")
-    record["status"] = "smoke_passed"
 
 
 def prepare_release(settings, manifest, args, folder, timings, record):
@@ -323,13 +295,10 @@ def main():
     parser.add_argument(
         "--native", action="store_true", help="Rebuild DLLs and run native tests"
     )
-    parser.add_argument("--smoke", action="store_true", help="Run the boot test after install")
     parser.add_argument("--result", type=Path, help="Also write the release record to this path")
     args = parser.parse_args()
-    if args.action != "release" and (args.install or args.native or args.smoke or args.result):
-        parser.error("--install, --native, --smoke and --result apply to release")
-    if args.smoke and not args.install:
-        parser.error("--smoke requires --install")
+    if args.action != "release" and (args.install or args.native or args.result):
+        parser.error("--install, --native and --result apply to release")
     if args.path and args.action != "logs":
         parser.error("A file path applies to logs")
     if args.action == "state":
@@ -392,7 +361,7 @@ def main():
     if args.install and any(not settings.get(key) for key in required):
         parser.error("Configure launcher, data_dir and game in project.local.json")
     (ROOT / "build").mkdir(exist_ok=True)
-    release(settings, manifest, args, smoke=args.smoke, result_path=args.result)
+    release(settings, manifest, args, result_path=args.result)
 
 
 if __name__ == "__main__":
