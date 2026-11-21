@@ -104,7 +104,10 @@ class LocalReleaseTests(unittest.TestCase):
         self.assertEqual(record["status"], "smoke_failed")
         report = Path(record["smoke_report"])
         report.parent.mkdir()
-        report.write_text("{}", encoding="utf-8")
+        worker.write(report, {"exit_code": 0, "tests": [{"id": "native_hud_boot", "status": "not_run"}]})
+        with self.assertRaisesRegex(RuntimeError, "did not confirm a passing Halo boot"):
+            project.boot_smoke(settings, self.home, timings, record)
+        worker.write(report, {"exit_code": 0, "tests": [{"id": "native_hud_boot", "status": "pass"}]})
         project.boot_smoke(settings, self.home, timings, record)
         self.assertEqual(record["status"], "smoke_passed")
         command = run.call_args.args[0]

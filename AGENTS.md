@@ -38,8 +38,10 @@ paths come from the ignored `project.local.json`.
 
 ## Release
 
-- Keep the manifest version and CHANGELOG.md entry aligned. Use the beta
-  numbering and release-note format in docs/REPOSITORY.md.
+- Keep the manifest version, package name and CHANGELOG.md entry aligned.
+  Use `-devN` for approved development builds. Owner approval after in-game
+  testing authorizes packaging the next plain minor release. Follow the
+  numbering examples and release-note format in docs/REPOSITORY.md.
 
 - For a requested build and install, use
   `python -B tools/project.py release --install`. Add `--native` for C++

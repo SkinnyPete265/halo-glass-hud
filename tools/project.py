@@ -173,8 +173,15 @@ def boot_smoke(settings, folder, timings, record):
             "test", "run", plan, "--profile", record["profile"],
             "--game", settings["game"], "--out", str(output), "--wait", "0",
         ], folder / "smoke.log")
-        if not (output / "report.json").is_file():
+        report_path = output / "report.json"
+        if not report_path.is_file():
             raise RuntimeError("SWOFTY finished without writing the smoke report.")
+        report = read_json(report_path)
+        if report.get("exit_code") != 0 or not any(
+            test.get("id") == "native_hud_boot" and test.get("status") == "pass"
+            for test in report.get("tests", [])
+        ):
+            raise RuntimeError("The SWOFTY report did not confirm a passing Halo boot.")
     record["status"] = "smoke_passed"
 
 
@@ -202,6 +209,11 @@ def prepare_release(settings, manifest, args, folder, timings, record):
     with timings.stage("packaging"):
         run([sys.executable, "-B", "tools/package.py"])
     record["package_sha256"] = file_hash(package)
+    artifact = folder / f"{addon}-{version}.swoftyaddon"
+    shutil.copy2(package, artifact)
+    if file_hash(artifact) != record["package_sha256"]:
+        raise RuntimeError("The versioned package differs from the verified package.")
+    record["package"] = str(artifact)
     composition_reused = (
         "Reused native composition and validation"
         in compose_log.read_text(encoding="utf-8")
@@ -360,6 +372,7 @@ def main():
         )
         return
     if args.action == "check":
+        (ROOT / "build").mkdir(exist_ok=True)
         run([sys.executable, "-B", "tests/test_workflow.py"])
         run([sys.executable, "-B", "tests/test_compatibility.py"])
         run([sys.executable, "-B", "tests/test_local_release.py"])

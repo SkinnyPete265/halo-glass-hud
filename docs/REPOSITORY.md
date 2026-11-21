@@ -79,12 +79,21 @@ PC. To pause polling, disable **Halo HUD local release worker** in Task Schedule
 
 ## Versions and changelogs
 
-Use the manifest's SemVer version for the addon, Git tag, and changelog heading.
-Use a minor bump for player-visible features and a patch bump for fixes. During
-beta, append `-beta.N` and increment N for distinct test packages on the same
-release line, such as `0.15.0-beta.1` and `0.15.0-beta.2`. Reuse a version for
-retries of the same candidate. Assign a new version when distributing a changed
-candidate.
+Use the manifest's SemVer version for the addon, package, Git tag, and changelog
+heading. Approval to test authorizes a development build on the current line,
+such as `0.15.0-dev1`. Increment the sequence for revised test candidates
+(`0.15.0-dev2`), and reuse it for retries of the same commit.
+
+Owner approval after in-game testing authorizes packaging the tested changes as
+the next plain minor version. The sequence is `0.15.0-dev1` → `0.16.0` →
+`0.16.0-dev1` → `0.17.0`. Record the tested commit, then update the manifest
+and changelog on a release commit containing just release metadata. Dispatch
+`package` for that commit. A fresh local install or public upload can be
+requested separately.
+
+Each release record points to the verified, versioned deliverable
+(`local.halo-hud-v2-0.15.0-dev1.swoftyaddon`, for example). The release command
+uses the canonical filename in `dist/` internally for installation and cache checks.
 
 Add one `## <version>` section to CHANGELOG.md per version. Use `New/Added`,
 `Fixes` and `Miscellaneous` as the default headings. Omit empty sections and
@@ -94,8 +103,8 @@ paths, checkpoints and raw validation evidence in PROJECT_STATE.md or the
 release record. Packaging checks
 that the manifest version has a matching entry and embeds the changelog.
 
-For an approved release, use tag `v<version>` and attach the verified package
-to the matching GitHub release. Mark beta releases as prereleases on GitHub.
+For an approved public upload, use tag `v<version>` and attach the verified
+package to the matching GitHub release. Mark development builds as prereleases.
 Run `python -B tools/project.py notes` to print the current entry for GitHub or
 SWOFTY's separate changelog field. Review the selected notes before submitting
 to the Addon Browser. SWOFTY locks approved version changelogs.

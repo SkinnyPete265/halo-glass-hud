@@ -92,7 +92,8 @@ class CompatibilityTests(unittest.TestCase):
                 compatibility.build_environment_fingerprint(settings),
             )
 
-    def test_runtime_fingerprint_tracks_launcher_and_game_changes(self):
+    @mock.patch.object(compatibility, "_source_runtime_inputs_fingerprint", return_value="source")
+    def test_runtime_fingerprint_tracks_launcher_and_game_changes(self, _source):
         with tempfile.TemporaryDirectory() as temporary:
             settings, game, launcher = self.make_environment(Path(temporary))
             first = compatibility.runtime_inputs_fingerprint(settings)

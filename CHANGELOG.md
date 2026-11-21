@@ -2,7 +2,7 @@
 
 Development and beta builds use the same versioned notes intended for future releases.
 
-## 0.15.0-beta.1
+## 0.15.0-dev1
 
 ### New/Added
 
