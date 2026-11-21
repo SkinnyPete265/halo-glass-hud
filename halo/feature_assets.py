@@ -1,7 +1,7 @@
 """Layered native sprites for charge colour animation and DRS effects."""
 from functools import lru_cache
 import math
-from PIL import Image, ImageDraw, ImageChops
+from PIL import Image, ImageDraw, ImageChops, ImageFilter
 from . import artwork as art, layout as geo, material as mat
 
 S = art.S
@@ -15,10 +15,39 @@ def battery_layers():
     box = (round(left*S),round(top*S),round(right*S),round(bottom*S))
     ImageDraw.Draw(images["housing"]).rounded_rectangle(
         box,radius=geo.BATTERY_CORNER_RADIUS*S,fill=(5,27,39,195))
-    draw = ImageDraw.Draw(images["frame"])
-    draw.rounded_rectangle(box,radius=geo.BATTERY_CORNER_RADIUS*S,outline=(255,255,255,225),width=S)
-    draw.rounded_rectangle(((right+1)*S,(cy-3)*S,(right+4)*S,(cy+3)*S),
-                           radius=2*S,fill=(255,255,255,180))
+    # Filter the frame and terminal independently so their narrow separator
+    # remains visible after the existing 3x-to-sprite composition.
+    frame_source = Image.new('L', images["frame"].size)
+    ImageDraw.Draw(frame_source).rounded_rectangle(
+        box, radius=geo.BATTERY_CORNER_RADIUS*S, outline=225, width=S
+    )
+    frame_mask = mat._box_filter_alpha_3x3(frame_source)
+    terminal_source = Image.new('L', images["frame"].size)
+    ImageDraw.Draw(terminal_source).rounded_rectangle(
+        ((right+1)*S,(cy-3)*S,(right+4)*S,(cy+3)*S),
+        radius=2*S,fill=180,
+    )
+    terminal_mask = mat._box_filter_alpha_3x3(terminal_source)
+    # Keep the two original transparent texels between the frame and
+    # terminal. The normalized filter otherwise blends both strokes across
+    # this deliberately open separator.
+    centre_y = round(cy*S)
+    frame_x = [x for x in range(round(right*S)-S*2, round(right*S)+S*2+1)
+               if frame_source.getpixel((x, centre_y))]
+    terminal_x = [x for x in range(round(right*S)-S*2, round((right+4)*S)+1)
+                  if terminal_source.getpixel((x, centre_y))]
+    if frame_x and terminal_x:
+        gap_start, gap_end = max(frame_x)+1, min(terminal_x)
+        if gap_end-gap_start == 2:
+            terminal_bounds = terminal_source.getbbox()
+            for y in range(terminal_bounds[1], terminal_bounds[3]):
+                for x in range(gap_start, gap_end):
+                    frame_mask.putpixel((x, y), 0)
+                    terminal_mask.putpixel((x, y), 0)
+    for mask in (frame_mask, terminal_mask):
+        layer = Image.new('RGBA', mask.size, (255,255,255,0))
+        layer.putalpha(mask)
+        images["frame"].alpha_composite(layer)
     fill_left, fill_top, fill_right, fill_bottom = geo.battery_fill_bounds()
     ImageDraw.Draw(images["fill"]).rounded_rectangle(
         (round(fill_left*S),round(fill_top*S),round(fill_right*S)-1,round(fill_bottom*S)-1),
@@ -43,13 +72,13 @@ def fill_edge_mask(window_width, feather, width=512, height=8):
 
 @lru_cache(maxsize=1)
 def drs_clip_mask():
-    """Align the rail ends to the wings' horizontal span with a soft fade."""
+    """Fade the rail core and halo together at the outer wing-face tips."""
     row=Image.new('L',(geo.WIDTH*S,1))
     values=[]
     for xx in range(row.width):
-        x=geo.CX+abs(xx/S-geo.CX)
-        fade=mat._smooth((x-geo.WING_FACE_START)/1.25)
-        fade*=mat._smooth((geo.DRS_RAIL_END+28.-x)/32.)
+        x=geo.CX+abs((xx+.5)/S-geo.CX)
+        fade=mat._smooth((x-geo.DRS_RAIL_START)/1.25)
+        fade*=mat._smooth((geo.WING_FACE_END-x)/32.)
         values.append(round(255*fade))
     row.putdata(values)
     return row.resize((geo.WIDTH*S,geo.HEIGHT*S),Image.Resampling.NEAREST)
@@ -114,9 +143,44 @@ def pedal_mask(side, size=512):
     draw = ImageDraw.Draw(image)
     for index in range(10):
         points = [
-            (round((.5 + (x - geo.CX) / geo.PEDAL_MASK_SPAN) * sample_size),
-             round((.5 + (y - geo.CY) / geo.PEDAL_MASK_SPAN) * sample_size))
+            (round((.5 + (x - geo.CX) / geo.PEDAL_MASK_SPAN) * sample_size - .5),
+             round((.5 + (y - geo.CY) / geo.PEDAL_MASK_SPAN) * sample_size - .5))
             for x, y in geo.slat_points(side, index)
         ]
         draw.polygon(points, fill=(255, 255, 255, 255))
-    return image.resize((size, size), Image.Resampling.LANCZOS)
+    # The idle base uses a one-art-pixel box on 3x coverage. On this 2x
+    # supersample a 512 px mask that footprint is about 3.29 sample texels.
+    # Filter alpha before Lanczos reduction so the downsampler is included in
+    # the final edge profile instead of stacking a second blur on top of it.
+    footprint = max(1.0, sample_size / geo.PEDAL_MASK_SPAN)
+
+    def box_weights(width, radius):
+        half_width = width / 2.
+        return tuple(max(0., min(half_width, index + .5) -
+                         max(-half_width, index - .5)) / width
+                     for index in range(-radius, radius + 1))
+
+    if footprint > 5.0:
+        alpha = image.getchannel('A').filter(
+            ImageFilter.BoxBlur((footprint - 1.) / 2.)
+        )
+    elif footprint <= 3.0:
+        radius = 1
+        weights = box_weights(footprint, radius)
+        kernel_size = 3
+        kernel = tuple(a * b for a in weights for b in weights)
+        alpha = image.getchannel('A').filter(ImageFilter.Kernel(
+            (kernel_size, kernel_size), kernel, scale=1.0
+        ))
+    else:
+        radius = 2
+        weights = box_weights(footprint, radius)
+        kernel_size = 5
+        kernel = tuple(a * b for a in weights for b in weights)
+        alpha = image.getchannel('A').filter(ImageFilter.Kernel(
+            (kernel_size, kernel_size), kernel, scale=1.0
+        ))
+    alpha = alpha.resize((size, size), Image.Resampling.LANCZOS)
+    result = Image.new('RGBA', (size, size), (255, 255, 255, 0))
+    result.putalpha(alpha)
+    return result

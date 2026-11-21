@@ -14,7 +14,12 @@ struct SectorSnapshot {
 
 class SectorState {
 public:
-    void reset() { *this = SectorState{}; }
+    void reset()
+    {
+        const auto revisions = revisions_;
+        *this = SectorState{};
+        revisions_ = revisions; // A new context can receive a split before the next HUD flush.
+    }
 
     void context(unsigned generation, int player)
     {
@@ -57,6 +62,13 @@ public:
     }
 
     SectorSnapshot snapshot() const { return current_; }
+
+    bool observed(unsigned vehicle, int lap, unsigned sector) const
+    {
+        return vehicle < seen_.size() && sector < 3 && seen_[vehicle][sector].lap == lap;
+    }
+
+    void clear_display() { current_ = {}; }
 
 private:
     struct Seen { int lap = -1; int milliseconds = 0; };

@@ -1,14 +1,18 @@
 """Centre-out DRS highlight study using a soft, trailing native-mask profile."""
 from functools import lru_cache
 import math
-from PIL import Image, ImageChops
+from PIL import Image
 from . import artwork as art, layout as geo, material as mat, feature_assets
 
 PERIOD = 1.0
 CURVE = 'default_curve_1'
-INNER_X, OUTER_X = geo.DRS_RAIL_START, geo.DRS_RAIL_END
 WINDOW_WIDTH = 84.
 END_MARGIN = 40.
+
+
+def rail_limits():
+    """Return the current rail endpoints, including live tuning changes."""
+    return geo.DRS_RAIL_START, geo.DRS_RAIL_END
 
 
 def mask_weight(u):
@@ -23,13 +27,14 @@ def mask_weight(u):
 
 
 def window_centre(phase):
-    start = INNER_X-geo.CX-END_MARGIN-WINDOW_WIDTH/2
-    end = OUTER_X-geo.CX+END_MARGIN+WINDOW_WIDTH/2
+    inner_x, outer_x = rail_limits()
+    start = inner_x-geo.CX-END_MARGIN-WINDOW_WIDTH/2
+    end = outer_x-geo.CX+END_MARGIN+WINDOW_WIDTH/2
     return start+(end-start)*max(0.,min(1.,phase))
 
 
-@lru_cache(maxsize=1)
-def surface():
+@lru_cache(maxsize=8)
+def _surface_for_geometry(inner_x, outer_x, width, height):
     image = art.canvas()
     for edge in geo.DRS_RAIL_EDGES:
         for side in (-1,1):
@@ -42,8 +47,14 @@ def surface():
     return feature_assets.clip_drs(image)
 
 
-@lru_cache(maxsize=2)
-def side_surface(side):
+def surface():
+    return _surface_for_geometry(
+        geo.DRS_RAIL_START, geo.DRS_RAIL_END, geo.WIDTH, geo.HEIGHT
+    )
+
+
+@lru_cache(maxsize=16)
+def _side_surface_for_geometry(side, inner_x, outer_x, width, height):
     image = surface().copy()
     alpha = image.getchannel('A')
     middle = round(geo.CX * art.S)
@@ -53,6 +64,18 @@ def side_surface(side):
         alpha.paste(0, (0, 0, middle, image.height))
     image.putalpha(alpha)
     return image
+
+
+def side_surface(side):
+    return _side_surface_for_geometry(
+        side, geo.DRS_RAIL_START, geo.DRS_RAIL_END, geo.WIDTH, geo.HEIGHT
+    )
+
+
+def invalidate():
+    """Discard cached DRS textures after a wing geometry change."""
+    _surface_for_geometry.cache_clear()
+    _side_surface_for_geometry.cache_clear()
 
 
 def mask_texture(side, width=256, height=8):
@@ -67,20 +90,3 @@ def mask_texture(side, width=256, height=8):
         values.append((255,255,255,alpha))
     image.putdata(values*height)
     return image
-
-
-def draw(image,phase,opacity=1.0,reveal=1.0):
-    highlight=surface().copy()
-    centre=window_centre(phase)
-    values=[]
-    limit=INNER_X-geo.CX+(OUTER_X-INNER_X)*reveal
-    for x in range(highlight.width):
-        radius=abs(x/art.S-geo.CX)
-        u=.5+(radius-centre)/WINDOW_WIDTH
-        fade=max(0.,min(1.,(limit+3.-radius)/6.)) if reveal<1. else 1.
-        values.append(round(255*mask_weight(u)*fade*opacity*reveal))
-    mask=Image.new('L',(highlight.width,1))
-    mask.putdata(values)
-    mask=mask.resize(highlight.size,Image.Resampling.NEAREST)
-    highlight.putalpha(ImageChops.multiply(highlight.getchannel('A'),mask))
-    image.alpha_composite(highlight)

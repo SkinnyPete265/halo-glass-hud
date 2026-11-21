@@ -7,18 +7,34 @@ KEY_COUNT = 33
 TEXTURE_SIZE = (2048, 512)
 MARGIN = 12.
 FIRST_X, LAST_X = 780., 1025.
-TANGENT = math.radians(geo.angle((FIRST_X+LAST_X)/2))
+def limits():
+    return geo.wing_content_x(FIRST_X), geo.wing_content_x(LAST_X)
+
+
+def tangent():
+    first, last = limits()
+    return math.radians(geo.angle((first + last) / 2))
+
+TANGENT = tangent()
 COS, SIN = math.cos(TANGENT), math.sin(TANGENT)
 
 
+def refresh_style():
+    global TANGENT, COS, SIN
+    TANGENT = tangent()
+    COS, SIN = math.cos(TANGENT), math.sin(TANGENT)
+
+
 def window():
-    width=LAST_X-FIRST_X+4*MARGIN
-    height=2*(geo.top(LAST_X+MARGIN)-geo.top(FIRST_X-MARGIN)+2*MARGIN)
+    first, last = limits()
+    width=last-first+4*MARGIN
+    height=2*(geo.top(last+MARGIN)-geo.top(first-MARGIN)+2*MARGIN)
     return width,height
 
 
 def tip(fraction):
-    x=FIRST_X-MARGIN+(LAST_X-FIRST_X+2*MARGIN)*max(0.,min(1.,fraction))
+    first, last = limits()
+    x=first-MARGIN+(last-first+2*MARGIN)*max(0.,min(1.,fraction))
     return x,geo.top(x)+geo.RPM_BAR_OFFSET
 
 

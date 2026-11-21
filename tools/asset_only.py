@@ -8,13 +8,13 @@ from build_inputs import (
     artwork_source_fingerprint,
     files_fingerprint,
     file_hash,
-    runtime_inputs_fingerprint,
 )
+from compatibility import build_environment_fingerprint, runtime_inputs_fingerprint
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def structure_fingerprint():
+def structure_fingerprint(settings=None):
     paths = list((ROOT / "tools/formats").glob("*.py"))
     paths.extend(
         path for path in (ROOT / "native/reference").rglob("*") if path.is_file()
@@ -28,14 +28,19 @@ def structure_fingerprint():
             "tools/f126_interop.py",
             "tools/prepare_runtime.py",
             "tools/asset_only.py",
+            "tools/compatibility.py",
         )
     )
     return hashlib.sha256(
-        (artwork_source_fingerprint() + files_fingerprint(paths)).encode()
+        (
+            artwork_source_fingerprint()
+            + files_fingerprint(paths)
+            + build_environment_fingerprint(settings)
+        ).encode()
     ).hexdigest()
 
 
-def state():
+def state(settings=None):
     records = json.loads((ROOT / "registry/hud.json").read_text())["hud.element"]
     paths = {
         item["png"]
@@ -44,7 +49,8 @@ def state():
     }
     return {
         "validation": file_hash(ROOT / "runtime/validation.json"),
-        "structure": structure_fingerprint(),
+        "structure": structure_fingerprint(settings),
+        "environment": build_environment_fingerprint(settings),
         "registry": file_hash(ROOT / "registry/hud.json"),
         "style": json.loads((ROOT / "style.json").read_text()),
         "assets": {name: file_hash(ROOT / name) for name in sorted(paths)},
@@ -56,20 +62,20 @@ def state():
     }
 
 
-def record(expected_inputs=None):
+def record(expected_inputs=None, settings=None):
     path = ROOT / "build/composition-cache.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    captured = state()
-    if expected_inputs and runtime_inputs_fingerprint() != expected_inputs:
+    captured = state(settings)
+    if expected_inputs and runtime_inputs_fingerprint(settings) != expected_inputs:
         raise ValueError("Source changed while recording composition state")
     path.write_text(json.dumps(captured, indent=2) + "\n", encoding="utf-8")
 
 
-def try_reuse(expected_inputs):
+def try_reuse(expected_inputs, settings=None):
     """Reuse the previous native checks only when their inputs and outputs match."""
     try:
         previous = json.loads((ROOT / "build/composition-cache.json").read_text())
-        if previous != state():
+        if previous != state(settings):
             return False
         report = json.loads((ROOT / "runtime/validation.json").read_text())
         if report.get("source_inputs_sha256") != expected_inputs:
@@ -90,15 +96,15 @@ def try_reuse(expected_inputs):
     return True
 
 
-def try_refresh(launcher, addon, expected_inputs=None):
-    expected_inputs = expected_inputs or runtime_inputs_fingerprint()
+def try_refresh(launcher, addon, expected_inputs=None, settings=None):
+    expected_inputs = expected_inputs or runtime_inputs_fingerprint(settings)
     from halo.tuning import ART_ONLY_KEYS
     from prepare_runtime import validate, validate_f126
     from formats import erpw
 
     try:
         old = json.loads((ROOT / "build/composition-cache.json").read_text())
-        current = state()
+        current = state(settings)
     except (OSError, ValueError, KeyError):
         return False
     if not isinstance(old, dict) or any(
@@ -202,7 +208,7 @@ def try_refresh(launcher, addon, expected_inputs=None):
         template = erpw.Erp(ROOT / "runtime/hud_template.erp")
         validate(runtime, template)
         validate_f126(runtime, template)
-        if runtime_inputs_fingerprint() != expected_inputs:
+        if runtime_inputs_fingerprint(settings) != expected_inputs:
             raise ValueError("Style changed during texture generation")
         # All compatibility checks finish before the existing outputs are replaced.
         for archive, path in (
@@ -221,7 +227,7 @@ def try_refresh(launcher, addon, expected_inputs=None):
         }
         report["texture_refresh"] = {"images": images, "native_layout_reused": True}
         path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-        record(expected_inputs)
+        record(expected_inputs, settings)
         print(
             f"Refreshed {len(images)} texture resources using the validated native layout."
         )

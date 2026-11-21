@@ -1,0 +1,48 @@
+name: Local release
+run-name: Halo local release ${{ inputs.commit }} ${{ inputs.mode }}
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full SHA of the approved candidate
+        required: true
+        type: string
+      mode:
+        description: What to run on the release PC
+        required: true
+        type: choice
+        default: package
+        options:
+          - package
+          - install
+          - install-and-smoke
+permissions:
+  contents: read
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    env:
+      APPROVER: ${{ github.repository_owner }}
+      ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      COMMIT: ${{ inputs.commit }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - name: Validate release request
+        shell: bash
+        run: |
+          [[ "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]]
+          [[ "$ACTOR" == "$APPROVER" && "$TRIGGERING_ACTOR" == "$APPROVER" ]]
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          case "$MODE" in package|install|install-and-smoke) ;; *) exit 1 ;; esac
+  checks:
+    needs: authorize
+    uses: ./.github/workflows/checks.yml
+    with:
+      commit: ${{ inputs.commit }}
+  queue:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Source checks passed. The local release worker will pick up this request.' >> "$GITHUB_STEP_SUMMARY"

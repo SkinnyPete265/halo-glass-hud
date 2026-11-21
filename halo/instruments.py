@@ -18,6 +18,19 @@ BATTERY_COLOUR_KEYS = (
     (1.00, BATTERY_BLUE),
 )
 
+
+def refresh_style():
+    """Refresh battery colours after the preview editor changes its draft."""
+    global BATTERY_BLUE, BATTERY_RED, BATTERY_YELLOW, BATTERY_COLOUR_KEYS
+    BATTERY_BLUE = rgb(geo.STYLE['battery_blue'])
+    BATTERY_RED = rgb(geo.STYLE['battery_red'])
+    BATTERY_YELLOW = rgb(geo.STYLE['battery_yellow'])
+    BATTERY_COLOUR_KEYS = (
+        (0.00, BATTERY_RED), (0.10, BATTERY_RED),
+        (0.125, BATTERY_YELLOW), (0.30, BATTERY_YELLOW),
+        (0.35, BATTERY_BLUE), (1.00, BATTERY_BLUE),
+    )
+
 def battery_colour(charge):
     charge = max(0.0, min(1.0, charge))
     for (lower, first), (upper, second) in zip(

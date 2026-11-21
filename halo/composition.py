@@ -1,7 +1,7 @@
-"""Generate the native composition and preview from shared sprite positions."""
+"""Generate the native dial records and in-game editor assets."""
 import json
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageChops
 from .asset_cache import AssetCache
 from tools.build_inputs import artwork_source_fingerprint
 from .tuning import values
@@ -10,6 +10,42 @@ from . import feature_assets, instruments, sectors, drs_motion, rpm_mask
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "view_model_data.hud_halo_v2_"
+STABLE_BASE_CROP = (27, 0, 3755,
+                    1320 + round(geo.ARTWORK_TOP_PADDING * geo.BASE_TEXTURE_RESOLUTION))
+
+
+def crop_sprite(name, final):
+    """Return the source image and crop used for one composed sprite."""
+    if name == 'base':
+        bounds = final.getchannel('A').getbbox()
+        if bounds is None:
+            raise ValueError('Empty sprite base')
+        left, top, right, bottom = STABLE_BASE_CROP
+        if (final.width >= right and final.height >= bottom and
+                bounds[0] >= left and bounds[1] >= top and
+                bounds[2] <= right and bounds[3] <= bottom):
+            return final, STABLE_BASE_CROP
+
+        left, top, bound_right, bound_bottom = bounds
+        width = bound_right - left
+        height = bound_bottom - top
+        right = left + (width + 3) // 4 * 4
+        bottom = top + (height + 3) // 4 * 4
+        padded_width = max(final.width, right)
+        padded_height = max(final.height, bottom)
+        if (padded_width, padded_height) != final.size:
+            expanded = Image.new('RGBA', (padded_width, padded_height))
+            expanded.alpha_composite(final)
+            final = expanded
+        return final, (left, top, right, bottom)
+
+    bounds = final.getbbox()
+    if not bounds:
+        raise ValueError('Empty sprite ' + name)
+    left, top, right, bottom = bounds
+    right += (4 - (right - left) % 4) % 4
+    bottom += (4 - (bottom - top) % 4) % 4
+    return final, (left, top, right, bottom)
 
 def write():
     sprites = {}
@@ -20,25 +56,32 @@ def write():
 
     def dependencies(name):
         if name=='base':
-            return ('gears_size','gears_weight','gears_colour','rpm_width')
+            return ('gears_size','gears_weight','gears_colour','gears_x','gears_y',
+                    'wing_extension','wing_content_follow','text_size','text_colour','text_glow',
+                    'text_glow_strength','text_outline','rpm_width')
+        if name.startswith('gear_'):
+            return ('wing_extension','wing_content_follow','text_size','text_colour','text_glow','text_glow_strength','text_outline')
+        if name.startswith('drs_'):
+            return ('wing_extension',)
         if name.startswith('battery_'):
             return ('battery_width','battery_height','battery_y')
         if name in ('rpm_fill','rpm_fill_mask'):
-            return ('rpm_width',)
+            return ('rpm_width','wing_extension','wing_content_follow')
         return ()
 
-    def sprite(name, producer, resolution=1, resample=Image.Resampling.LANCZOS):
+    def sprite(name, producer, resolution=2, resample=Image.Resampling.LANCZOS,
+               origin=(0.0, 0.0)):
         def create():
             final=art.finish(producer(),resolution,resample)
-            box=final.getbbox()
-            if not box:
-                raise ValueError('Empty sprite '+name)
-            left,top,right,bottom=box
-            right+=(4-(right-left)%4)%4
-            bottom+=(4-(bottom-top)%4)%4
+            final, (left,top,right,bottom) = crop_sprite(name, final)
             final.crop((left,top,right,bottom)).save(ROOT/'art'/(name+'.png'))
             return {'png':'art/'+name+'.png',
-                    'bounds':geo.hud_bounds([v/resolution for v in (left,top,right,bottom)])}
+                    'bounds':geo.hud_bounds([
+                        left / resolution + origin[0],
+                        top / resolution + origin[1],
+                        right / resolution + origin[0],
+                        bottom / resolution + origin[1],
+                    ])}
         sprites[name]=cache.get(name,dependencies(name),create)
 
     def raw_sprite(name,producer,bounds):
@@ -47,7 +90,8 @@ def write():
             return {'png':'art/'+name+'.png','bounds':bounds}
         sprites[name]=cache.get(name,dependencies(name),create)
 
-    sprite('base',art.base,geo.BASE_TEXTURE_RESOLUTION)
+    sprite('base',art.texture_base,geo.BASE_TEXTURE_RESOLUTION,
+           origin=(-geo.WING_TEXTURE_PADDING, -geo.ARTWORK_TOP_PADDING))
     sprite('rpm_fill',art.rpm_fill)
     # The composer encodes these full-frame textures for the native input masks.
     # Their resources are consumed by native_interop, with no extra scene quads.
@@ -90,7 +134,7 @@ def write():
     ):
         element={
             "kind":"text","id":name,"style":"OSD_24_bold","align":"centre",
-            "box":box*size_ratio,"cap_height":round(spec.size*.672*geo.HUD_SCALE,6),
+            "box":box*size_ratio,"cap_height":round(spec.size*.672*geo.HUD_SCALE*geo.STYLE['text_size']/100.,6),
             "at":geo.hud_point(spec.x,spec.y),
             "rot":spec.rotation,"layer":26,
         }
@@ -133,6 +177,29 @@ def write():
             sprite(name,lambda:feature_assets.battery_layers()[part],geo.BATTERY_TEXTURE_RESOLUTION)
             battery.append({"kind":"sprite","id":name,"sprite":name,
                             "layer":27 if part=="bolt" else 24 if part=="housing" else 25})
+    bx, by = geo.BATTERY_CENTRE
+    battery.append({
+        "kind": "text", "id": "energy_status", "style": "OSD_24_bold",
+        "align": "centre", "box": 96 * size_ratio, "cap_height": 8 * size_ratio,
+        "at": geo.hud_point(bx, by - geo.BATTERY_HEIGHT / 2 - 5),
+        "value": {"view_model": PREFIX + "energy_status"}, "layer": 27,
+    })
+    preview[PREFIX + "energy_status"] = "75%  DEPLOY"
+    # These two standalone assets are redirected only into the editor preview
+    # during runtime preparation. Bake its 75% battery tint without changing
+    # either game's live material or native colour animation.
+    preview_tint = Image.new(
+        'RGBA', (1, 1), instruments.battery_colour(.75) + (255,))
+    for part in ('frame', 'fill'):
+        name = 'battery_preview_' + part
+        layer = feature_assets.battery_layers()[part]
+        tint = preview_tint.resize(layer.size)
+        producer = lambda layer=layer, tint=tint: ImageChops.multiply(layer, tint)
+        if part == 'fill':
+            sprite(name, producer, geo.BATTERY_TEXTURE_RESOLUTION,
+                   resample=Image.Resampling.BOX)
+        else:
+            sprite(name, producer, geo.BATTERY_TEXTURE_RESOLUTION)
     elements.append({"kind":"group","id":"battery",
                      "visible":{"game":"has_ers"},"children":battery})
 
@@ -161,7 +228,7 @@ def write():
     preview[PREFIX + "drs_sweep"] = 0.0
     rails.append({"kind":"text","id":"drs_open_label","style":geo.DRS_TEXT_STYLE,
                   "align":"centre","box":120*size_ratio,
-                  "cap_height":round(geo.DRS_STATUS_TEXT_SIZE*.672*geo.HUD_SCALE,6),
+                  "cap_height":round(geo.DRS_STATUS_TEXT_SIZE*.672*geo.HUD_SCALE*geo.STYLE['text_size']/100.,6),
                   "at":geo.hud_point(*geo.DRS_CENTRE),"literal":"DRS OPEN","layer":27})
     elements.append({
         "kind":"group","id":"drs_open",
@@ -171,7 +238,9 @@ def write():
     })
     preview[PREFIX + "special_gear"] = ""
     record = {"prefix": "halo_v2", "dial": "f1_25", "stock": "hide", "spectator": False,
-              "box": geo.hud_bounds([65, 0, 1100, geo.HUD_BOX_BOTTOM]),
+              "box": geo.hud_bounds([max(0,2*geo.CX-geo.WING_EFFECT_END-11),
+                                     -geo.ARTWORK_TOP_PADDING,
+                                     geo.WING_EFFECT_END+11, geo.HUD_BOX_BOTTOM]),
               "sprites": sprites, "elements": elements,
               "editor": {"preview": preview}}
     from .f126 import record_for_2026
@@ -181,14 +250,3 @@ def write():
         encoding="utf-8")
     cache.save()
     return record
-
-def preview(record):
-    """Render shared artwork with sample inputs for offline inspection."""
-    from . import preview_instruments
-    image = preview_instruments.render(preview_instruments.State(
-        speed=250, rpm=11585, gear=6, throttle=1., brake=0.,
-        charge=.75, drs="distance", drs_distance=100))
-    image.save(ROOT / "design/core-preview-transparent.png")
-    background = Image.new("RGBA", image.size, (31, 47, 57, 255))
-    background.alpha_composite(image)
-    background.convert("RGB").save(ROOT / "design/core-preview.png")

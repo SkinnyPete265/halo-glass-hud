@@ -14,11 +14,11 @@ notice and GNU AGPL terms. That notice is preserved with the source.
 
 ## SWOFTY SDK
 
-native/include/source.json records the SWOFTY v1.9.0 repository tag and SHA-256
+native/include/source.json records the SWOFTY v1.10.11 tag, commit and SHA-256
 hashes for the included headers. The SDK is MIT-licensed. Its SDK-specific notice
 is bundled in native/include/LICENSE, with its source URL and hash in source.json.
 The SDK fetch helper retrieves that same package-level notice.
-[Upstream SDK licence](https://github.com/Swofty-Developments/SwoftyLauncher/blob/v1.9.0/packages/sdk/LICENSE).
+[Upstream SDK licence](https://github.com/Swofty-Developments/SwoftyLauncher/blob/v1.10.11/packages/sdk/LICENSE).
 
 ## Saira
 
@@ -38,6 +38,16 @@ game UI resources.
 Redistribution permissions for the captured game-derived resources have not
 been established in this project. Their presence in development packages is
 recorded here for the public-release provenance review.
+
+For a public package, audit both the authoring inputs and the runtime
+overlays. Start from native/reference/native-controls-source.json for the
+component list and runtime/overlays.json for the target archives. For each
+game-derived resource, record its source and redistribution permission, or
+identify how to compose it locally from the player's install. Excluding the
+reference files from the ZIP alone leaves game-derived fragments in the
+runtime overlays. Verify the distributable archive's actual contents before
+submitting it. Keep compatibility claims tied to tested platforms, builds,
+and seasons.
 
 ## Local reference media
 

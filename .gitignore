@@ -1,6 +1,8 @@
 __pycache__/
 build/
 dist/
+/local/archive/
+/local/release-worker/
 *.obj
 *.exp
 *.lib
@@ -10,9 +12,8 @@ native/*.dll
 project.local.json
 PROJECT_STATE.md
 *.pdb
-design/reference/
 
-# Generated HUD data and preview media
+# Generated HUD data and local visual references
 art/
 registry/hud.json
 runtime/

@@ -1,15 +1,19 @@
 """Reusable project status, checks and release orchestration."""
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
+from build_inputs import file_hash
+from compatibility import build_environment_identity
 from log_summary import save_summary
-from release_state import update as update_state
+from release_state import read_json, update as update_state
 from project_config import local_settings, launcher_command
 from stage_timing import Timings
 
@@ -32,12 +36,18 @@ def run(command, log=None):
 
 def game_running():
     result = subprocess.run(
-        ["tasklist", "/FI", "IMAGENAME eq F1_25.exe", "/FO", "CSV", "/NH"],
+        [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "(Get-Process -Name F1_25 -ErrorAction SilentlyContinue).Count",
+        ],
         capture_output=True,
         text=True,
         check=True,
     )
-    return "f1_25.exe" in result.stdout.lower()
+    return result.stdout.strip() not in ("", "0")
 
 
 def preserve_installed(settings, manifest):
@@ -47,8 +57,22 @@ def preserve_installed(settings, manifest):
     version = json.loads((installed / "swofty.json").read_text(encoding="utf-8"))[
         "version"
     ]
-    backup = ROOT / "build" / ("rollback-v" + version)
+    archive_root = ROOT / "local/archive/rollbacks"
+    backup = archive_root / ("rollback-v" + version)
     target = backup / "dist" / (manifest["id"] + ".swoftyaddon")
+    if target.exists() and not installed_matches(target, installed):
+        digest = hashlib.sha256()
+        for path in sorted(item for item in installed.rglob("*") if item.is_file()):
+            digest.update(path.relative_to(installed).as_posix().encode("utf-8"))
+            digest.update(b"\0")
+            with path.open("rb") as source:
+                for block in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(block)
+            digest.update(b"\0")
+        backup = archive_root / ("rollback-v" + version + "-" + digest.hexdigest()[:12])
+        target = backup / "dist" / (manifest["id"] + ".swoftyaddon")
+        if target.exists() and not installed_matches(target, installed):
+            raise RuntimeError("Existing rollback snapshot does not match the installed addon")
     if not target.exists():
         target.parent.mkdir(parents=True, exist_ok=True)
         pending = target.with_suffix(".tmp")
@@ -60,6 +84,8 @@ def preserve_installed(settings, manifest):
             with zipfile.ZipFile(pending) as archive:
                 if archive.testzip():
                     raise RuntimeError("Rollback archive CRC failed")
+            if not installed_matches(pending, installed):
+                raise RuntimeError("Rollback archive does not match the installed addon")
             pending.replace(target)
         finally:
             pending.unlink(missing_ok=True)
@@ -91,17 +117,103 @@ def profile_enabled(path, addon):
     )
 
 
-def release(settings, manifest, args):
-    timings = Timings(ROOT / "build/release-timings.json")
+def release(settings, manifest, args, *, smoke=False, result_path=None):
+    runs = ROOT / "build/releases"
+    runs.mkdir(parents=True, exist_ok=True)
+    folder = Path(tempfile.mkdtemp(prefix="v" + manifest["version"] + "-", dir=runs))
+    timings = Timings(folder / "release-timings.json")
+    record = {
+        "version": manifest["version"],
+        "profile": settings.get("profile", "default"),
+        "status": "failed",
+    }
+    try:
+        if args.install and settings.get("data_dir"):
+            profile = record["profile"]
+            profile_file = Path(settings["data_dir"]) / "profiles" / f"{profile}.json"
+            if profile_file.is_file() and profile_enabled(profile_file, "nick.f1-2026-halo"):
+                warning = (
+                    f"Project Halo (nick.f1-2026-halo) is enabled in profile {profile!r} "
+                    "and can override Halo Glass dial resources. Disable it in SWOFTY "
+                    "if exact-cache verification reports a conflict."
+                )
+                record["profile_warning"] = warning
+                print(f"Warning: {warning}", file=sys.stderr, flush=True)
+        prepare_release(settings, manifest, args, folder, timings, record)
+        record["status"] = "cache_verified" if args.install else "packaged"
+        if smoke:
+            boot_smoke(settings, folder, timings, record)
+    except Exception as error:
+        record["error"] = str(error)
+        raise
+    finally:
+        record["evidence"] = str(folder)
+        result = json.dumps(record, indent=2) + "\n"
+        (folder / "release.json").write_text(result, encoding="utf-8")
+        if result_path:
+            pending = result_path.with_suffix(".tmp")
+            pending.write_text(result, encoding="utf-8")
+            pending.replace(result_path)
+        if timings.path.exists():
+            shutil.copy2(timings.path, ROOT / "build/release-timings.json")
+        print(f"Release evidence: {folder}")
+
+
+def boot_smoke(settings, folder, timings, record):
+    if game_running():
+        record["status"] = "waiting_for_game_close"
+        raise RuntimeError("Close F1 25 normally before starting the boot smoke test.")
+    record["status"] = "smoke_failed"
+    output = folder / "smoke"
+    record["smoke_report"] = str(output / "report.json")
+    cli = launcher_command(settings["launcher"], settings["data_dir"])
+    plan = str(ROOT / "tests/halo-smoke.test.json")
+    with timings.stage("boot smoke test"):
+        run(cli + [
+            "test", "run", plan, "--profile", record["profile"],
+            "--game", settings["game"], "--out", str(output), "--wait", "0",
+        ], folder / "smoke.log")
+        report_path = output / "report.json"
+        if not report_path.is_file():
+            raise RuntimeError("SWOFTY finished without writing the smoke report.")
+        report = read_json(report_path)
+        if report.get("exit_code") != 0 or not any(
+            test.get("id") == "native_hud_boot" and test.get("status") == "pass"
+            for test in report.get("tests", [])
+        ):
+            raise RuntimeError("The SWOFTY report did not confirm a passing Halo boot.")
+    record["status"] = "smoke_passed"
+
+
+def prepare_release(settings, manifest, args, folder, timings, record):
     version = manifest["version"]
-    command = [sys.executable, "-B", "tools/build.py", "--compose", "--skip-preview"]
+    addon = manifest["id"]
+    command = [sys.executable, "-B", "tools/build.py", "--compose"]
     if args.native:
         command.append("--native")
-    compose_log = ROOT / "build" / ("compose-v" + version + ".log")
+    compose_log = folder / ("compose-v" + version + ".log")
     with timings.stage("artwork and composition"):
         run(command, compose_log)
+    for name in ("build/build-timings.json", "runtime/validation.json"):
+        path = ROOT / name
+        if path.exists():
+            shutil.copy2(path, folder / path.name)
+    record["source_inputs_sha256"] = read_json(folder / "validation.json").get("source_inputs_sha256")
+    identity = build_environment_identity(settings)
+    record["game"] = identity["game"]
+    record["launcher"] = identity["launcher"]
+    record["launcher"]["version"] = subprocess.check_output(
+        [identity["launcher"]["path"], "--version"], cwd=ROOT, text=True
+    ).strip()
+    package = ROOT / "dist" / (addon + ".swoftyaddon")
     with timings.stage("packaging"):
         run([sys.executable, "-B", "tools/package.py"])
+    record["package_sha256"] = file_hash(package)
+    artifact = folder / f"{addon}-{version}.swoftyaddon"
+    shutil.copy2(package, artifact)
+    if file_hash(artifact) != record["package_sha256"]:
+        raise RuntimeError("The versioned package differs from the verified package.")
+    record["package"] = str(artifact)
     composition_reused = (
         "Reused native composition and validation"
         in compose_log.read_text(encoding="utf-8")
@@ -114,32 +226,34 @@ def release(settings, manifest, args):
     if not args.install:
         return
     if game_running():
+        record["status"] = "waiting_for_game_close"
         raise RuntimeError(
             "Package ready. Close F1 25 normally, then repeat release --install. Verified outputs will be reused."
         )
-    profile = settings.get("profile", "default")
-    addon = manifest["id"]
+    profile = record["profile"]
     store = Path(settings["data_dir"])
     profile_path = store / "profiles" / (profile + ".json")
-    snapshot = ROOT / "build" / f"profile-before-{profile}-v{version}.json"
+    snapshot = folder / "profile-before.json"
     shutil.copy2(profile_path, snapshot)
     cli = launcher_command(settings["launcher"], settings["data_dir"]) + [
         "--profile",
         profile,
     ]
-    package = ROOT / "dist" / (addon + ".swoftyaddon")
     rollback = None
     with timings.stage("installation"):
+        # Keep a byte-exact rollback snapshot even when SWOFTY already has the
+        # requested package. Same-version prior snapshots may contain different art.
+        rollback = preserve_installed(settings, manifest)
+        record["rollback"] = str(rollback) if rollback else None
         if installed_matches(package, store / "addons" / addon):
             print("Reused matching installed addon files.")
         else:
-            rollback = preserve_installed(settings, manifest)
             run(cli + ["addons", "install", str(package)])
         if profile_enabled(profile_path, addon):
             print("Addon is already enabled in the selected profile.")
         else:
             run(cli + ["addons", "enable", addon])
-    log = ROOT / "build" / ("swofty-build-v" + version + ".log")
+    log = folder / ("swofty-build-v" + version + ".log")
     with timings.stage("SWOFTY cache"):
         run(cli + ["build", "--game", settings["game"]], log)
     matches = re.findall(
@@ -150,23 +264,38 @@ def release(settings, manifest, args):
     if not matches:
         raise RuntimeError("Build completed. Inspect the cache path in " + str(log))
     cache = Path(matches[-1].strip())
-    with timings.stage("installation verification"):
-        run(
-            [
-                sys.executable,
-                "-B",
-                "tools/verify_install.py",
-                "--cache",
-                str(cache),
-                "--launcher",
-                settings["launcher"],
-                "--data-dir",
-                str(store),
-                "--profile",
-                profile,
-            ]
-        )
+    record["cache"] = str(cache)
+    try:
+        with timings.stage("installation verification"):
+            run(
+                [
+                    sys.executable,
+                    "-B",
+                    "tools/verify_install.py",
+                    "--cache",
+                    str(cache),
+                    "--launcher",
+                    settings["launcher"],
+                    "--data-dir",
+                    str(store),
+                    "--profile",
+                    profile,
+                    "--profile-snapshot",
+                    str(snapshot),
+                ]
+            )
+    except (subprocess.CalledProcessError, RuntimeError):
+        conflict_log = folder / "conflicts.log"
+        try:
+            run(cli + ["conflicts"], conflict_log)
+        except (OSError, RuntimeError):
+            pass  # Keep the original verification failure if diagnostics also fail.
+        record["conflict_log"] = str(conflict_log)
+        print(f"SWOFTY profile conflict report: {conflict_log}", file=sys.stderr)
+        raise
     save_summary(log, ROOT / "build/log-baselines/swofty-build.json", accept=True)
+    report = ROOT / "build" / f"install-report-v{version}.json"
+    shutil.copy2(report, folder / report.name)
     print(
         json.dumps(
             {
@@ -183,30 +312,35 @@ def release(settings, manifest, args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "action", choices=("status", "check", "release", "state", "logs", "tune")
+        "action", choices=("status", "check", "release", "state", "logs", "notes")
     )
     parser.add_argument(
         "path", nargs="?", type=Path, help="Log file for the logs action"
     )
-    parser.add_argument("--port", type=int, default=8766, help="Local tuning port")
     parser.add_argument(
         "--install", action="store_true", help="Install and verify a requested release"
     )
     parser.add_argument(
         "--native", action="store_true", help="Rebuild DLLs and run native tests"
     )
+    parser.add_argument("--smoke", action="store_true", help="Run the boot test after install")
+    parser.add_argument("--result", type=Path, help="Also write the release record to this path")
     args = parser.parse_args()
-    if args.action != "release" and (args.install or args.native):
-        parser.error("--install and --native apply to release")
+    if args.action != "release" and (args.install or args.native or args.smoke or args.result):
+        parser.error("--install, --native, --smoke and --result apply to release")
+    if args.smoke and not args.install:
+        parser.error("--smoke requires --install")
     if args.path and args.action != "logs":
         parser.error("A file path applies to logs")
-    if args.action == "tune":
-        from tune_server import serve
-
-        serve(port=args.port)
-        return
     if args.action == "state":
         print(json.dumps(update_state(), indent=2))
+        return
+    if args.action == "notes":
+        from package import release_notes
+
+        manifest = read_json(ROOT / "swofty.json")
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        print(release_notes(changelog, manifest["version"]))
         return
     if args.action == "logs":
         if args.path is None:
@@ -238,11 +372,19 @@ def main():
         )
         return
     if args.action == "check":
-        run([sys.executable, "-B", "tools/test_workflow.py"])
+        (ROOT / "build").mkdir(exist_ok=True)
+        run([sys.executable, "-B", "tests/test_workflow.py"])
+        run([sys.executable, "-B", "tests/test_compatibility.py"])
+        run([sys.executable, "-B", "tests/test_local_release.py"])
         if not (ROOT / "registry/hud.json").exists():
-            run([sys.executable, "-B", "tools/build.py", "--skip-preview"])
-        run([sys.executable, "-B", "tools/test_drs_battery.py"])
-        run([sys.executable, "-B", "tools/test_devtools.py"])
+            run([sys.executable, "-B", "tools/build.py"])
+        from validate_registry import validate_registry
+
+        validate_registry(read_json(ROOT / "swofty.json")["id"])
+        run([sys.executable, "-B", "tests/test_composition_crop.py"])
+        run([sys.executable, "-B", "tests/test_wing_edge_stitch.py"])
+        run([sys.executable, "-B", "tests/test_drs_battery.py"])
+        run([sys.executable, "-B", "tests/test_devtools.py"])
         return
     settings = local_settings()
     manifest = json.loads((ROOT / "swofty.json").read_text(encoding="utf-8"))
@@ -250,7 +392,7 @@ def main():
     if args.install and any(not settings.get(key) for key in required):
         parser.error("Configure launcher, data_dir and game in project.local.json")
     (ROOT / "build").mkdir(exist_ok=True)
-    release(settings, manifest, args)
+    release(settings, manifest, args, smoke=args.smoke, result_path=args.result)
 
 
 if __name__ == "__main__":

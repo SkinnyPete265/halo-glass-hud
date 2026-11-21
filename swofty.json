@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "id": "local.halo-hud-v2",
-  "name": "Halo Glass HUD v2 - Development",
-  "version": "0.11.0",
+  "name": "Halo Glass HUD v2 (Beta)",
+  "version": "0.15.0-dev1",
   "author": "Local HUD project",
-  "description": "Shared Halo HUD with a wider native-clipped battery, heavier GEARS caption and a rounded RPM tip following the wing curve, plus the existing mode and sector animations.",
+  "description": "A glass-style racing HUD for the 2025 and 2026 F1 dials, with speed, gears, energy, and sector times.",
   "license": "AGPL-3.0-or-later",
   "kind": [
     "ui",

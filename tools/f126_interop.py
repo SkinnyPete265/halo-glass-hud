@@ -7,6 +7,7 @@ import copy
 import uuid
 from formats import pkg, idf, uinode as N, uiops as U
 from halo import layout, drs_motion
+from halo.tuning import rgb
 from halo.f126 import BOOST_STATES
 from native_interop import walk, soft_mask, text_opacity, remove_signals
 
@@ -110,16 +111,17 @@ def straight_mode(archive, reference, scene, dial_child, controls, ctx):
     boost.items[N.LAYOUT].items=[]
     boost.items[N.EVENTS].items=[]
     for state in BOOST_STATES:
-        gate='boost_'+state
+        gate='boost_'+state.lower()
         controls.items[N.CHILDREN].items.append(U.hidden(gate,ctx.prefix+'_'+gate))
         boost.items[N.EVENTS].items.append(U.event(state,[
-            U.sig(prefix+'boost_'+other,'show' if other==state else 'hide',state)
+            U.sig(prefix+'boost_'+other.lower(),'show' if other==state else 'hide',state)
             for other in BOOST_STATES]))
     controls.items[N.CHILDREN].items.append(boost)
 
     # Crisp native text with a restrained four-sample glow around SM OPEN.
     label=N.child(controls,'t_drs_open_label')
-    label.items[N.PROPS].set('colourOverride',U.prop('rgba','#9af7c7ff'))
+    text_colour = rgb(layout.STYLE['text_colour']) if layout.STYLE['text_colour'] != '#ffffff' else (154,247,199)
+    label.items[N.PROPS].set('colourOverride',U.prop('rgba','#'+''.join(f'{v:02x}' for v in text_colour)+( 'ff' if len(text_colour)==3 else '')))
     glyph=root.find(ctx.prefix+'_drs_open_label').obj
     parent=root.find(ctx.prefix+'_drs_open_label_n').obj
     pixel=layout.HUD_SCALE*.018/parent['scale'].value[0]
@@ -128,16 +130,22 @@ def straight_mode(archive, reference, scene, dial_child, controls, ctx):
         glow=copy.deepcopy(glyph)
         glow['name'].value=name
         idf.set_param(glow,'guid',str(uuid.uuid5(uuid.NAMESPACE_URL,'halo-v2/'+name)))
-        glow.set('position',pkg.Val('vec3',[x*pixel,y*pixel,0.,0.]))
+        glow.set('position',pkg.Val('vec3',[x*pixel*layout.STYLE['text_glow'],y*pixel*layout.STYLE['text_glow'],0.,0.]))
         idf.set_param(glow,'eLayer.layer',39,'si32')
         parent['children'].items.insert(0,glow)
         binding=copy.deepcopy(label)
         binding.items[N.PROPS]['name'].value='sm_open_glow_'+str(index)
         binding.items[N.LAYOUT]=U.layout_path(name)
         controls.items[N.CHILDREN].items.append(binding)
-        text_opacity(controls,dial_child,binding,'sm_glow_alpha_'+str(index),name,8/255.,ctx=ctx)
+        text_opacity(controls,dial_child,binding,'sm_glow_alpha_'+str(index),name,
+                     8/255.*layout.STYLE['text_glow_strength']/100.,ctx=ctx)
     for name in ('sm_distance_caption','sm_distance_value','sm_button','sm_keyboard','sm_prompt_caption'):
-        N.child(controls,'t_'+name).items[N.PROPS].set('colourOverride',U.prop('rgba','#'+''.join(f'{v:02x}' for v in layout.DRS_PROMPT_COLOUR)))
+        colour = rgb(layout.STYLE['text_colour']) if layout.STYLE['text_colour'] != '#ffffff' else layout.DRS_PROMPT_COLOUR
+        N.child(controls,'t_'+name).items[N.PROPS].set('colourOverride',U.prop('rgba','#'+''.join(f'{v:02x}' for v in colour)))
+    if layout.STYLE['text_colour'] != '#ffffff':
+        colour = '#' + layout.STYLE['text_colour'][1:] + 'ff'
+        for name in ('overtake_on', 'overtake_off', *(f'boost_text_{state.lower()}' for state in BOOST_STATES)):
+            N.child(controls, 't_' + name).items[N.PROPS].set('colourOverride', U.prop('rgba', colour))
     idf.set_param(root.find(ctx.prefix+'_sm_button').obj,'style','icons_tool_tips')
     N.child(controls,'t_sm_keyboard').items[N.PROPS].set('localise',
         U.prop('bool',False,'x_mode_overtake_tooltip_localise'))

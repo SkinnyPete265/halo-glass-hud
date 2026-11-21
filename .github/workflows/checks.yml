@@ -1,5 +1,13 @@
 name: Source checks
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      commit:
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
@@ -7,8 +15,37 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
       - run: python -m pip install -r requirements.txt
       - run: python -B tools/project.py check
+  native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install pinned Zig
+        shell: pwsh
+        run: |
+          $name = 'zig-x86_64-windows-0.17.0'
+          $archive = Join-Path $env:RUNNER_TEMP "$name.zip"
+          curl.exe --fail --location --retry 3 --output $archive "https://ziglang.org/download/0.17.0/$name.zip"
+          if ($LASTEXITCODE -ne 0) { throw 'Zig download failed' }
+          $expected = 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428'
+          if ((Get-FileHash -LiteralPath $archive).Hash -ne $expected) {
+            throw 'Zig archive SHA-256 mismatch'
+          }
+          tar.exe -xf $archive -C $env:RUNNER_TEMP
+          if ($LASTEXITCODE -ne 0) { throw 'Zig extraction failed' }
+          Join-Path $env:RUNNER_TEMP $name | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - run: python -m pip install -r requirements.txt
+      - run: python -B tools/build.py --native-tests

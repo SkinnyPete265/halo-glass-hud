@@ -70,11 +70,23 @@ Native Alpha overrides cap effect opacity independently of the main text.
 Pending times show white --.--- placeholders. Completed times use yellow,
 green or purple according to the earlier split-event comparison rules.
 
-native/src/sector_times.cpp ports the verified Sess_LapTimes_ReportSplit hook
-with its existing guarded memory offsets. SWOFTY 1.9 live state supplies the
-player and session generation. Typed HUD leaves publish all timing cells as
-one transaction and resynchronize after HUD recreation. Colour comparisons
-learn personal and session bests from observed splits in the current session.
+On the two recognized executables, sector timing prefers SWOFTY Live table v6
+when the player's `car_detail` has `SWOFTY_LIVE_HAVE_LAP_TIMES`. The current
+record supplies S1/S2. The preceding record supplies S3 when the completed-lap
+counter advances. S3 stays visible until the next observed player split.
+First samples and discontinuities establish a baseline. Colour comparisons
+learn personal and session bests from observed player and rival splits.
+Typed HUD leaves publish the timing cells together and resynchronize after HUD
+recreation. The HUD uses game-memory-backed state with UDP disabled.
+
+The existing verified reader supplies splits on older cores or when its gate
+arrives before live timing is available. After selecting Live, the comparison
+reader only contributes diagnostics. In `loader.log`, search for
+`[halo-v2-sectors]` to see the provider, player gates (one-based lap and
+milliseconds), unmatched gates after two seconds, and paired times differing
+by more than one millisecond. Live SDK headers are pinned in
+`native/include/source.json`. The addon ABI remains 9.
+[SWOFTY Live timing contract](https://f1.swofty.net/reference/std/live.html#car-detail)
 
 The reader and focused state/publication tests compile and pass offline.
 The user confirmed v0.4.0's in-game sector display and approved its appearance.
@@ -151,7 +163,6 @@ Launcher and store paths are configurable through project.local.json and CLI opt
 - halo/material.py and artwork.py render the glass and RPM warning artwork.
 - halo/feature_assets.py supplies battery, DRS and native pedal-mask textures.
 - halo/composition.py writes the native hud.element authoring record.
-- halo/preview_instruments.py renders simulated offline states.
 - tools/native_interop.py connects the captured native input/DRS components and
   adds the battery's DiffuseColour animation.
 - tools/prepare_runtime.py repairs composer gauge packets and validates the
@@ -164,19 +175,19 @@ Launcher and store paths are configurable through project.local.json and CLI opt
 - native/reference/sector_reader.cpp preserves the earlier reader source.
 - halo/sectors.py supplies the shared sector character layout and bindings.
 - native/src/sector_state.hpp supplies split classification and atomic publication.
-- native/src/sector_times.cpp reads the verified split event and tracks session context.
+- native/src/sector_times.cpp connects the Live frame callback and guarded split event.
+- native/src/live_sectors.hpp tracks providers, lap transitions and comparison diagnostics.
 
 Python 3.14, Pillow, SWOFTY and Zig are used locally. Run from this project folder.
 
 ```powershell
-python -B tools/build.py --compose --skip-preview
+python -B tools/build.py --compose
 python -B tools/package.py
 ```
 
 Add --native to build.py when changing the C++ source. That compiles the DLL and
 runs the focused state test with assertions enabled. --launcher and --data-dir
-can override the local executable and store paths. --skip-preview reuses the
-approved preview while regenerating the source assets and composition.
+can override the local executable and store paths.
 
 The canonical manifest uses operations.hud. The installer uses precomposed
 operations.erp overlays. Full authoring sources are included under source/.
@@ -186,17 +197,18 @@ Run developer commands from the repository root.
 
 Generated artwork is reused when its source, font, interpreter/library and output
 hashes match build/artwork-cache.json. Missing or edited outputs trigger regeneration.
-The --skip-preview option reuses the approved visual preview during release work.
+The option reuses the approved visual preview during release work.
 
 New compositions record the artwork and native UI source fingerprint in their
 validation metadata. Packaging checks that fingerprint, registry and runtime hashes,
 then verifies a temporary archive before publishing it. Earlier validation records
 continue to use their registry and runtime checks.
 
-Run python -B tools/test_workflow.py when editing these workflow functions. Its
+Run python -B tests/test_workflow.py when editing these workflow functions. Its
 isolated checks cover cache reuse, invalidation, stale input rejection and atomic
 publication. tools/verify_install.py performs the release installation checks.
-AGENTS.md and PROJECT_STATE.md hold the active development workflow and project state.
+AGENTS.md holds the development workflow. Share PROJECT_STATE.md when starting a
+new chat. Use the game's HUD editor and gameplay for visual review.
 
 ## Validation and remaining work
 
@@ -250,8 +262,7 @@ Font License in assets/fonts/Saira/OFL.txt.
 
 halo/instruments.py contains charge colours, the charge-domain interpolation,
 gear artwork and measured RPM row positions. Authoring and native interop use
-these definitions directly. The offline renderer imports them and retains its
-existing exports for the historical preview recipes.
+these definitions directly.
 
 ## Local configuration
 
@@ -263,8 +274,7 @@ omitted during composition. Installation verification accepts --data-dir,
 --profile and --cache for an explicit cache folder.
 
 Reference capture accepts --legacy-addon and --stock-archive. It is a bootstrap
-utility for the captured build inputs. The historical preview recipes under
-tools/ use local screenshots and archived versions for their comparisons.
+utility for the captured build inputs.
 
 ## Publication status
 
@@ -295,6 +305,6 @@ full. The corrected source uses the exact cavity bounds, BOX-filtered fill art
 and a centered feather profile. Charge maps linearly to the visible fill edge
 while the existing smooth retarget animation drives the native slider.
 
-Run python -B tools/test_drs_battery.py after generating artwork for focused checks.
+Run python -B tests/test_drs_battery.py after generating artwork for focused checks.
 The native typography fixture uses existing composer output when available.
 Full composition and in-game confirmation follow in the next approved build.
