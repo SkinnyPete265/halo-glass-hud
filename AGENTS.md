@@ -36,6 +36,21 @@ paths come from the ignored `project.local.json`.
 - Run focused checks for the change. Recompile affected DLLs and run native tests
   for C++ edits. Reuse validated assets and DLLs for unrelated changes.
 
+## Git history
+
+- Start each task or closely related set of changes on its own branch from
+  current `main`. Commit each meaningful change once its focused checks pass,
+  even when several changes belong to one candidate. Use a short, descriptive
+  commit message, such as “Smooth active brake and throttle slats.”
+- For longer experiments, make a clearly labelled checkpoint when it gives us
+  a useful rollback point. Leave unrelated working-tree edits out of the commit.
+- Open one PR per test candidate. Summarize the changes, checks completed, and
+  pending in-game checks in the PR. Preserve meaningful commits when merging.
+  Build the exact approved SHA and record the owner's in-game result against it.
+- Use the changelog to summarize each version. After in-game approval, track the
+  version and changelog in a separate release metadata commit. When publishing,
+  tag the exact commit that produced the verified package.
+
 ## Release
 
 - Keep the manifest version, package name and CHANGELOG.md entry aligned.
