@@ -226,6 +226,9 @@ class DeveloperToolsTests(unittest.TestCase):
         record = json.loads((evidence / "release.json").read_text())
         self.assertEqual(record["status"], "cache_verified")
         self.assertEqual(record["cache"], "fixture-cache")
+        self.assertEqual(Path(record["package"]).name, "test.hud-1.swoftyaddon")
+        self.assertEqual(Path(record["package"]).read_bytes(),
+                         (self.root / "dist/test.hud.swoftyaddon").read_bytes())
         self.assertIn("nick.f1-2026-halo", record["profile_warning"])
         self.assertTrue(project.profile_enabled(store / "profiles/default.json", "nick.f1-2026-halo"))
         self.assertTrue((evidence / "profile-before.json").is_file())

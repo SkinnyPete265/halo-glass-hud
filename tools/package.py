@@ -18,12 +18,14 @@ SOURCE_FILES = (
     "native/reference/native-controls-source.json", "native/reference/sector_reader.cpp",
     "tests/halo-smoke.test.json",
     "tests/test_compatibility.py", "tests/test_composition_crop.py", "tests/test_devtools.py",
-    "tests/test_drs_battery.py", "tests/test_wing_edge_stitch.py", "tests/test_workflow.py",
+    "tests/test_drs_battery.py", "tests/test_local_release.py", "tests/test_wing_edge_stitch.py",
+    "tests/test_workflow.py",
     "tools/asset_only.py", "tools/build.py", "tools/build_inputs.py", "tools/check_time_trial.py",
     "tools/compatibility.py", "tools/extract_native_reference.py", "tools/f126_interop.py",
-    "tools/fetch_sdk.py", "tools/log_summary.py", "tools/native_interop.py",
+    "tools/fetch_sdk.py", "tools/local_release.py", "tools/log_summary.py", "tools/native_interop.py",
     "tools/package.py", "tools/prepare_runtime.py", "tools/project.py",
-    "tools/project_config.py", "tools/release_state.py", "tools/stage_timing.py",
+    "tools/project_config.py", "tools/Register-HaloReleaseWorker.ps1", "tools/release_state.py",
+    "tools/stage_timing.py",
     "tools/validate_registry.py", "tools/verify_install.py", "tools/formats/SWOFTY-LICENSE",
 )
 SOURCE_PATTERNS = (
