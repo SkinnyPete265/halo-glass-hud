@@ -3,7 +3,7 @@ import sys
 import unittest
 
 ROOT = __import__('pathlib').Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path[:0] = [str(ROOT / "tools"), str(ROOT)]
 
 from halo import artwork, instruments, layout, material
 from halo.composition import STABLE_BASE_CROP, crop_sprite

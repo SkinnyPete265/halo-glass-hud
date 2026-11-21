@@ -55,7 +55,7 @@ def record_for_2026(shared):
                     visible={'game':'om_active','not':not active})
         record['elements'].append(item)
     for state,caption in BOOST_STATES.items():
-        item=text('boost_text_'+state,caption,size=13.)
-        record['elements'].append({'kind':'group','id':'boost_'+state,
+        item=text('boost_text_'+state.lower(),caption,size=13.)
+        record['elements'].append({'kind':'group','id':'boost_'+state.lower(),
             'at':geo.hud_point(x,y+76.),'rot':-16.,'children':[item]})
     return record

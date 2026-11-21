@@ -1,4 +1,4 @@
-"""Regression checks for asset invalidation, safe tuning and release diagnostics."""
+"""Regression checks for asset invalidation, style validation and release diagnostics."""
 
 import hashlib
 import contextlib
@@ -7,22 +7,25 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
 from types import SimpleNamespace
 import zipfile
-import asset_only
-import project
-from stage_timing import Timings
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path[:0] = [str(ROOT / "tools"), str(ROOT)]
+
+import asset_only
+import project
+from stage_timing import Timings
+
 from halo.asset_cache import AssetCache, cached_layer
 from halo import tuning
 from log_summary import save_summary, summarize
-from tune_server import apply_settings, digest
+from build_inputs import file_hash
 from release_state import update
 
 
@@ -47,7 +50,8 @@ class DeveloperToolsTests(unittest.TestCase):
         cache.get("base", ("gears_weight",), lambda: self.create("base"))
         cache.get("battery", ("battery_width",), lambda: self.create("battery"))
         cache.save()
-        changed = dict(self.settings, gears_weight=710)
+        changed_weight = 710 if self.settings["gears_weight"] != 710 else 720
+        changed = dict(self.settings, gears_weight=changed_weight)
         cache = AssetCache(self.root, "source", changed)
         cache.get("base", ("gears_weight",), lambda: self.create("base", 110))
         cache.get(
@@ -106,32 +110,6 @@ class DeveloperToolsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 tuning.validate(values)
 
-    def test_apply_is_explicit_and_rejects_stale_source(self):
-        path = self.root / "style.json"
-        path.write_text(json.dumps(self.settings))
-        original = digest(path)
-        updated = dict(self.settings, gears_weight=710)
-        report = apply_settings(path, updated, original)
-        self.assertEqual(report["changed"], ["gears_weight"])
-        self.assertEqual(report["build"], "texture-only candidate")
-        with self.assertRaises(ValueError):
-            apply_settings(path, self.settings, original)
-        self.assertEqual(json.loads(path.read_text())["gears_weight"], 710)
-
-    def test_unchanged_apply_preserves_source_bytes(self):
-        path = self.root / "style.json"
-        original = json.dumps(self.settings, separators=(",", ":"))
-        path.write_text(original)
-        result = apply_settings(path, self.settings, digest(path))
-        self.assertEqual(result["changed"], [])
-        self.assertEqual(path.read_text(), original)
-
-    def test_native_setting_requests_composition(self):
-        path = self.root / "style.json"
-        path.write_text(json.dumps(self.settings))
-        report = apply_settings(path, dict(self.settings, battery_y=150), digest(path))
-        self.assertEqual(report["build"], "native composition")
-
     def test_log_delta_preserves_errors_and_finds_new_warnings(self):
         path = self.root / "build.log"
         baseline = self.root / "baseline.json"
@@ -153,7 +131,7 @@ class DeveloperToolsTests(unittest.TestCase):
         for name in ("hud_scene.erp", "hud_template.erp"):
             path = self.root / "runtime" / name
             path.write_bytes(name.encode())
-            report["runtime_archives"][name] = digest(path)
+            report["runtime_archives"][name] = file_hash(path)
         (self.root / "runtime/validation.json").write_text(json.dumps(report))
         (self.root / "build/composition-cache.json").write_text('{"identity":"saved"}')
         with mock.patch.object(asset_only, "ROOT", self.root), mock.patch.object(
@@ -192,20 +170,27 @@ class DeveloperToolsTests(unittest.TestCase):
         (installed / "file").write_bytes(b"changed")
         self.assertFalse(project.installed_matches(package, installed))
 
-    def test_release_retry_skips_matching_install_and_enable(self):
+    def test_release_retry_preserves_rollback_and_skips_matching_install(self):
+        self.stub_release_evidence()
         store = self.root / "store"
         (store / "profiles").mkdir(parents=True)
         (store / "profiles/default.json").write_text(
-            '{"addons":[{"id":"test.hud","enabled":true}]}'
+            '{"addons":[{"id":"test.hud","enabled":true},'
+            '{"id":"nick.f1-2026-halo","enabled":true}]}'
         )
         settings = {"data_dir": str(store), "launcher": "swofty", "game": "game"}
         commands = []
+        verify_error = None
 
         def run(command, log=None):
             commands.append(command)
             if log:
                 log.parent.mkdir(parents=True, exist_ok=True)
                 log.write_text("overlay abcd: fixture-cache\n")
+            if "tools/verify_install.py" in command:
+                if verify_error:
+                    raise verify_error
+                (self.root / "build/install-report-v1.json").write_text("{}")
 
         with mock.patch.object(project, "ROOT", self.root), mock.patch.object(
             project, "run", side_effect=run
@@ -221,13 +206,30 @@ class DeveloperToolsTests(unittest.TestCase):
                 {"id": "test.hud", "version": "1"},
                 SimpleNamespace(native=False, install=True),
             )
-            backup.assert_not_called()
+            backup.assert_called_once_with(settings, {"id": "test.hud", "version": "1"})
+            verify_error = subprocess.CalledProcessError(1, "verify_install.py")
+            with self.assertRaises(subprocess.CalledProcessError) as raised:
+                project.release(settings, {"id": "test.hud", "version": "1"},
+                                SimpleNamespace(native=False, install=True))
+            self.assertIs(raised.exception, verify_error)
         self.assertFalse(
             any("install" in command or "enable" in command for command in commands)
         )
         self.assertTrue(
             any("verify_install.py" in " ".join(command) for command in commands)
         )
+        records = [json.loads(path.read_text())
+                   for path in (self.root / "build/releases").glob("*/release.json")]
+        failed = next(item for item in records if item["status"] == "failed")
+        self.assertTrue(Path(failed["conflict_log"]).is_file())
+        evidence = next(path.parent for path in (self.root / "build/releases").glob("*/install-report-v1.json"))
+        record = json.loads((evidence / "release.json").read_text())
+        self.assertEqual(record["status"], "cache_verified")
+        self.assertEqual(record["cache"], "fixture-cache")
+        self.assertIn("nick.f1-2026-halo", record["profile_warning"])
+        self.assertTrue(project.profile_enabled(store / "profiles/default.json", "nick.f1-2026-halo"))
+        self.assertTrue((evidence / "profile-before.json").is_file())
+        self.assertTrue((evidence / "install-report-v1.json").is_file())
         self.assertEqual(
             len(
                 json.loads((self.root / "build/release-timings.json").read_text())[
@@ -238,6 +240,7 @@ class DeveloperToolsTests(unittest.TestCase):
         )
 
     def test_running_game_defers_install_after_preparing_package(self):
+        self.stub_release_evidence()
         commands = []
 
         def run(command, log=None):
@@ -261,6 +264,18 @@ class DeveloperToolsTests(unittest.TestCase):
                 )
             backup.assert_not_called()
         self.assertEqual(len(commands), 2)
+        record = next((self.root / "build/releases").glob("*/release.json"))
+        self.assertEqual(json.loads(record.read_text())["status"], "waiting_for_game_close")
+
+    def stub_release_evidence(self):
+        (self.root / "dist").mkdir()
+        (self.root / "dist/test.hud.swoftyaddon").write_bytes(b"test addon")
+        self.enterContext(mock.patch.object(project, "build_environment_identity", return_value={
+            "game": {"steam_build_id": "1"}, "launcher": {"path": "swofty"},
+        }))
+        self.enterContext(mock.patch.object(
+            project.subprocess, "check_output", return_value="swofty 1.10.21\n",
+        ))
 
     def test_state_update_preserves_notes_and_matching_install_version(self):
         (self.root / "swofty.json").write_text('{"id":"test.hud","version":"2.0"}')

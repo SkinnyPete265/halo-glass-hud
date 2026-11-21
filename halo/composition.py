@@ -1,4 +1,4 @@
-"""Generate the native composition and preview from shared sprite positions."""
+"""Generate the native dial records and in-game editor assets."""
 import json
 from pathlib import Path
 from PIL import Image, ImageChops
@@ -177,6 +177,14 @@ def write():
             sprite(name,lambda:feature_assets.battery_layers()[part],geo.BATTERY_TEXTURE_RESOLUTION)
             battery.append({"kind":"sprite","id":name,"sprite":name,
                             "layer":27 if part=="bolt" else 24 if part=="housing" else 25})
+    bx, by = geo.BATTERY_CENTRE
+    battery.append({
+        "kind": "text", "id": "energy_status", "style": "OSD_24_bold",
+        "align": "centre", "box": 96 * size_ratio, "cap_height": 8 * size_ratio,
+        "at": geo.hud_point(bx, by - geo.BATTERY_HEIGHT / 2 - 5),
+        "value": {"view_model": PREFIX + "energy_status"}, "layer": 27,
+    })
+    preview[PREFIX + "energy_status"] = "75%  DEPLOY"
     # These two standalone assets are redirected only into the editor preview
     # during runtime preparation. Bake its 75% battery tint without changing
     # either game's live material or native colour animation.
@@ -242,14 +250,3 @@ def write():
         encoding="utf-8")
     cache.save()
     return record
-
-def preview(record):
-    """Render shared artwork with sample inputs for offline inspection."""
-    from . import preview_instruments
-    image = preview_instruments.render(preview_instruments.State(
-        speed=250, rpm=11585, gear=6, throttle=1., brake=0.,
-        charge=.75, drs="distance", drs_distance=100))
-    image.save(ROOT / "design/core-preview-transparent.png")
-    background = Image.new("RGBA", image.size, (31, 47, 57, 255))
-    background.alpha_composite(image)
-    background.convert("RGB").save(ROOT / "design/core-preview.png")

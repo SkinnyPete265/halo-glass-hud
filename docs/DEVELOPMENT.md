@@ -163,7 +163,6 @@ Launcher and store paths are configurable through project.local.json and CLI opt
 - halo/material.py and artwork.py render the glass and RPM warning artwork.
 - halo/feature_assets.py supplies battery, DRS and native pedal-mask textures.
 - halo/composition.py writes the native hud.element authoring record.
-- halo/preview_instruments.py renders simulated offline states.
 - tools/native_interop.py connects the captured native input/DRS components and
   adds the battery's DiffuseColour animation.
 - tools/prepare_runtime.py repairs composer gauge packets and validates the
@@ -182,14 +181,13 @@ Launcher and store paths are configurable through project.local.json and CLI opt
 Python 3.14, Pillow, SWOFTY and Zig are used locally. Run from this project folder.
 
 ```powershell
-python -B tools/build.py --compose --skip-preview
+python -B tools/build.py --compose
 python -B tools/package.py
 ```
 
 Add --native to build.py when changing the C++ source. That compiles the DLL and
 runs the focused state test with assertions enabled. --launcher and --data-dir
-can override the local executable and store paths. --skip-preview reuses the
-approved preview while regenerating the source assets and composition.
+can override the local executable and store paths.
 
 The canonical manifest uses operations.hud. The installer uses precomposed
 operations.erp overlays. Full authoring sources are included under source/.
@@ -199,17 +197,18 @@ Run developer commands from the repository root.
 
 Generated artwork is reused when its source, font, interpreter/library and output
 hashes match build/artwork-cache.json. Missing or edited outputs trigger regeneration.
-The --skip-preview option reuses the approved visual preview during release work.
+The option reuses the approved visual preview during release work.
 
 New compositions record the artwork and native UI source fingerprint in their
 validation metadata. Packaging checks that fingerprint, registry and runtime hashes,
 then verifies a temporary archive before publishing it. Earlier validation records
 continue to use their registry and runtime checks.
 
-Run python -B tools/test_workflow.py when editing these workflow functions. Its
+Run python -B tests/test_workflow.py when editing these workflow functions. Its
 isolated checks cover cache reuse, invalidation, stale input rejection and atomic
 publication. tools/verify_install.py performs the release installation checks.
-AGENTS.md and PROJECT_STATE.md hold the active development workflow and project state.
+AGENTS.md holds the development workflow. Share PROJECT_STATE.md when starting a
+new chat. Use the game's HUD editor and gameplay for visual review.
 
 ## Validation and remaining work
 
@@ -263,8 +262,7 @@ Font License in assets/fonts/Saira/OFL.txt.
 
 halo/instruments.py contains charge colours, the charge-domain interpolation,
 gear artwork and measured RPM row positions. Authoring and native interop use
-these definitions directly. The offline renderer imports them and retains its
-existing exports for the historical preview recipes.
+these definitions directly.
 
 ## Local configuration
 
@@ -276,8 +274,7 @@ omitted during composition. Installation verification accepts --data-dir,
 --profile and --cache for an explicit cache folder.
 
 Reference capture accepts --legacy-addon and --stock-archive. It is a bootstrap
-utility for the captured build inputs. The historical preview recipes under
-tools/ use local screenshots and archived versions for their comparisons.
+utility for the captured build inputs.
 
 ## Publication status
 
@@ -308,6 +305,6 @@ full. The corrected source uses the exact cavity bounds, BOX-filtered fill art
 and a centered feather profile. Charge maps linearly to the visible fill edge
 while the existing smooth retarget animation drives the native slider.
 
-Run python -B tools/test_drs_battery.py after generating artwork for focused checks.
+Run python -B tests/test_drs_battery.py after generating artwork for focused checks.
 The native typography fixture uses existing composer output when available.
 Full composition and in-game confirmation follow in the next approved build.

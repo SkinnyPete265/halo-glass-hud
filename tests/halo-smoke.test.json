@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "suite": "local.halo-hud-v2",
+  "defaults": {
+    "addons": ["swofty.core", "local.halo-hud-v2"],
+    "timeout_s": 120
+  },
+  "tests": [
+    {
+      "id": "native_hud_boot",
+      "env": {"kind": "boot"},
+      "assert": [
+        {"log": "\\[halo-v2\\] frame registration: ok", "min": 1},
+        {"no_crash": true}
+      ]
+    }
+  ]
+}

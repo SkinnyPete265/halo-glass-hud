@@ -256,6 +256,8 @@ def validate_editor_preview(archive, templates):
         raise ValueError('Shared editor preview sector label set is incomplete')
     if 'halo_v2_pv_battery_charge_win' not in preview_names:
         raise ValueError('Shared editor preview is missing its battery charge mask')
+    if 'halo_v2_pv_energy_status' not in preview_names:
+        raise ValueError('Shared editor preview is missing its battery energy readout')
 
     preview_materials = {
         'frame': 'eaid://ui_package/art/osd/components/hud/halo_v2_battery_preview_frame.emb?context=default',
@@ -330,6 +332,7 @@ def validate_editor_preview(archive, templates):
     expected_sample = {
         'game.ers_stored': .75,
         'game.has_ers': True,
+        'view_model_data.hud_halo_v2_energy_status': '75%  DEPLOY',
     }
     for key in ('glass_dial', 'glass_dial_26'):
         preview_values = records[key].get('editor', {}).get('preview', {})
@@ -872,9 +875,9 @@ def validate_f126(archive, templates):
             'native_xrefs_and_signal_targets':True,'timer_lifecycle':True}
 
 
-def prepare(expected_inputs=None):
-    expected_inputs=expected_inputs or runtime_inputs_fingerprint()
-    if runtime_inputs_fingerprint()!=expected_inputs:
+def prepare(expected_inputs=None, settings=None):
+    expected_inputs=expected_inputs or runtime_inputs_fingerprint(settings)
+    if runtime_inputs_fingerprint(settings)!=expected_inputs:
         raise ValueError('Source inputs changed before composition preparation')
     compiled, output = ROOT / 'build/composed', ROOT / 'runtime'
     output.mkdir(exist_ok=True)
@@ -932,7 +935,7 @@ def prepare(expected_inputs=None):
          'erps': ['2025_asset_groups/ui_package/' + path for path in templates_paths]},
     ]}
     (output / 'overlays.json').write_text(json.dumps(operations, indent=2) + '\n', encoding='utf-8')
-    if runtime_inputs_fingerprint()!=expected_inputs:
+    if runtime_inputs_fingerprint(settings)!=expected_inputs:
         raise ValueError('Source inputs changed during preparation. Retry the build.')
     record = {'clips': changes, 'native_clip_padding': native_padding,
         'native_interop': interop, 'editor_preview': editor_preview,

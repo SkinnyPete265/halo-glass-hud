@@ -10,27 +10,34 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from halo import composition
-from build_inputs import artwork_inputs_fingerprint, runtime_inputs_fingerprint, file_hash
-from project_config import local_settings, launcher_command
+from build_inputs import artwork_inputs_fingerprint, file_hash
+from compatibility import runtime_inputs_fingerprint
+from project_config import local_settings, launcher_command, require_active_game
+from validate_registry import validate_registry
 
 def run(command, **options):
     subprocess.run(command, cwd=ROOT, check=True, **options)
 
-def native():
+def native(zig_command="zig", *, tests_only=False):
     build = ROOT / "build" / "native"
     build.mkdir(parents=True, exist_ok=True)
-    zig = shutil.which("zig")
+    zig = shutil.which(zig_command)
     if not zig:
-        raise RuntimeError("Install Zig to use the official SWOFTY C++ toolchain.")
+        raise RuntimeError(f"Zig executable not found: {zig_command}")
+    # WinGet exposes Zig through a symlink. Zig needs the real executable path
+    # to locate its adjacent lib directory, so resolve the shim before invoking it.
+    zig = str(Path(zig).resolve())
     environment = os.environ.copy()
     environment["ZIG_GLOBAL_CACHE_DIR"] = str(ROOT / "build/zig-cache/global")
     environment["ZIG_LOCAL_CACHE_DIR"] = str(ROOT / "build/zig-cache/local")
     common = [zig, "c++", "-target", "x86_64-windows-gnu", "-std=c++23", "-O2",
               "-Wall", "-Wextra", "-Wno-nullability-completeness",
               "-I" + str(ROOT / "native/include")]
-    for source, destination in (("addon.cpp", "halo_hud_v2.dll"), ("sector_times.cpp", "sector_times.dll")):
-        run(common + ["-shared", "-o", str(ROOT / "native" / destination),
-                      str(ROOT / "native/src" / source)], env=environment)
+    if not tests_only:
+        for source, destination in (("addon.cpp", "halo_hud_v2.dll"),
+                                    ("sector_times.cpp", "sector_times.dll")):
+            run(common + ["-shared", "-o", str(ROOT / "native" / destination),
+                          str(ROOT / "native/src" / source)], env=environment)
     for name in ("dial_test", "sector_test"):
         test = build / (name + ".exe")
         run(common + ["-UNDEBUG", "-o", str(test), str(ROOT / "native/test" / (name + ".cpp"))],
@@ -72,13 +79,27 @@ def artwork():
 def main():
     settings = local_settings()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--native", action="store_true")
+    native_mode = parser.add_mutually_exclusive_group()
+    native_mode.add_argument("--native", action="store_true")
+    native_mode.add_argument("--native-tests", action="store_true",
+                             help="Run native fixtures without generating artwork or DLLs")
     parser.add_argument("--compose", action="store_true")
-    parser.add_argument("--skip-preview", action="store_true",
-                        help="Reuse the approved preview while generating build assets")
     parser.add_argument("--launcher", default=settings.get("launcher", "swofty"))
     parser.add_argument("--data-dir", default=settings.get("data_dir"))
+    parser.add_argument("--zig", default=settings.get("zig", "zig"),
+                        help="Zig executable for native builds and tests")
     args = parser.parse_args()
+    if args.native_tests:
+        if args.compose:
+            parser.error("--native-tests runs independently of --compose")
+        native(args.zig, tests_only=True)
+        return
+    if args.compose:
+        settings = {**settings, "launcher": args.launcher}
+        launcher = launcher_command(args.launcher, args.data_dir) + [
+            "--profile", settings.get("profile", "default"),
+        ]
+        require_active_game(launcher, settings.get("game"))
     authoring=artwork_inputs_fingerprint()
     from stage_timing import Timings
     timings = Timings(ROOT / "build/build-timings.json")
@@ -86,9 +107,6 @@ def main():
         record = artwork()
     if artwork_inputs_fingerprint()!=authoring:
         raise RuntimeError('Style changed during generation. Retry the build.')
-    if not args.skip_preview:
-        (ROOT/'design').mkdir(parents=True,exist_ok=True)
-        composition.preview(record)
     from PIL import Image
     for sprite in record["sprites"].values():
         with Image.open(ROOT / sprite["png"]) as image:
@@ -96,20 +114,21 @@ def main():
                 raise ValueError(f"Non-aligned texture {sprite['png']}")
     if args.native:
         with timings.stage("native DLLs and tests"):
-            native()
+            native(args.zig)
     if args.compose:
-        launcher = launcher_command(args.launcher, args.data_dir)
         addon = json.loads((ROOT/'swofty.json').read_text(encoding='utf-8'))['id']
         from asset_only import try_refresh, try_reuse, record as record_composition
-        expected_inputs = runtime_inputs_fingerprint()
+        validate_registry(addon)
+        expected_inputs = runtime_inputs_fingerprint(settings)
         with timings.stage("native composition"):
-            if not try_reuse(expected_inputs) and not try_refresh(launcher, addon, expected_inputs):
+            if not try_reuse(expected_inputs, settings) and not try_refresh(launcher, addon, expected_inputs, settings):
                 run(launcher + ['dev','check',str(ROOT)])
+                run(launcher + ['hud','check'])
                 run(launcher + ['hud','compose',str(ROOT),'registry/hud.json',
                                 '--id',addon,'--out',str(ROOT/'build/composed')])
                 from prepare_runtime import prepare
-                prepare(expected_inputs)
-                record_composition(expected_inputs)
+                prepare(expected_inputs, settings)
+                record_composition(expected_inputs, settings)
     print("Shared-layout artwork and composition are ready.")
 
 if __name__ == "__main__":

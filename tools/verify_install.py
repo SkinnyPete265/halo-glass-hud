@@ -10,6 +10,7 @@ from PIL import Image
 import prepare_runtime
 from formats import erpw
 from project_config import local_settings
+from halo import material
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,6 +28,7 @@ def main():
     parser.add_argument('--data-dir', type=Path, default=settings.get('data_dir'))
     parser.add_argument('--profile', default=settings.get('profile', 'default'))
     parser.add_argument('--cache', type=Path, help='Verify this exact cache folder')
+    parser.add_argument('--profile-snapshot', type=Path, help='Verify against this pre-install profile')
     args = parser.parse_args()
     if args.data_dir is None:
         parser.error('Supply --data-dir or set data_dir in project.local.json.')
@@ -66,13 +68,56 @@ def main():
                 for index in range(len(resource.frags)):
                     require(cached.frag_data(actual,index) == source.frag_data(resource,index), (target,resource.name,index))
                 verified += 1
+    persistent_target = "2025_asset_groups/ui_package/persistent.erp"
+    require(persistent_target in plan.get("replace", {}), "Fresh overlay has no persistent.erp replacement")
+    cached_persistent = erpw.Erp(Path(plan["replace"][persistent_target]))
+    stock_persistent_path = Path(settings["game"]) / persistent_target
+    stock_persistent = erpw.Erp(stock_persistent_path)
+    animated_library_name = (
+        "eaid://ui_package/art/materials/animated_material_library.idf"
+        "?context=animstringtable&file=0"
+    )
+    stock_library = stock_persistent.find(animated_library_name)
+    overlay_library = cached_persistent.find(animated_library_name)
+    require(len(stock_library.frags) == len(overlay_library.frags), "Updated stock animated material library is missing from cached persistent.erp")
+    require(
+        all(
+            stock_persistent.frag_data(stock_library, index)
+            == cached_persistent.frag_data(overlay_library, index)
+            for index in range(len(stock_library.frags))
+        ),
+        "Cached persistent.erp does not contain the current game's animated material library",
+    )
+
+    scene_source = erpw.Erp(ROOT / "runtime/hud_scene.erp")
+    registry = json.loads((ROOT / "registry/hud.json").read_text(encoding="utf-8"))
+    base_textures = {}
+    for dial_key in ("glass_dial", "glass_dial_26"):
+        record = registry["hud.element"][dial_key]
+        require("base" in record["sprites"], ("Missing base sprite", dial_key))
+        resource_name = (
+            "eaid://ui_package/art/osd/textures/hud/"
+            + record["prefix"]
+            + "_base.tif.image"
+        )
+        source = scene_source.find(resource_name)
+        cached = cached_persistent.find(resource_name)
+        require(len(source.frags) == len(cached.frags), ("Candidate base texture missing", dial_key))
+        for index in range(len(source.frags)):
+            require(
+                scene_source.frag_data(source, index)
+                == cached_persistent.frag_data(cached, index),
+                ("Candidate base texture differs in fresh overlay", dial_key, index),
+            )
+        base_textures[dial_key] = resource_name
+
     for item in manifest['operations']['native']:
         name = item['dll']
         route = 'swofty/addons/'+addon+'/'+name
         require(Path(plan['loader'][route]).read_bytes() == (ROOT/name).read_bytes(), ('DLL route', route))
 
-    snapshot = ROOT/'build'/f'profile-before-{args.profile}-v{version}.json'
-    if not snapshot.exists():
+    snapshot = args.profile_snapshot or ROOT/'build'/f'profile-before-{args.profile}-v{version}.json'
+    if args.profile_snapshot is None and not snapshot.exists():
         snapshot = ROOT/'build'/f'profile-before-v{version}.json'
     before = json.loads(snapshot.read_text())
     after = json.loads((store/'profiles'/(args.profile+'.json')).read_text())
@@ -96,6 +141,10 @@ def main():
     launcher = subprocess.check_output([str(args.launcher),'--version'],text=True).strip()
     report = {'version':version,'launcher':launcher,'installed_files':len(files),'cache':str(cache),
               'verified_resource_copies':verified,'native_loader_routes_verified':True,
+              'native_loader_routes':["swofty/addons/"+addon+"/"+item['dll'] for item in manifest['operations']['native']],
+              'stock_animated_material_library_verified':True,
+              'candidate_base_textures_verified':base_textures,
+              'race_edge_variant':material.DEFAULT_RACE_EDGE_VARIANT,
               'profile_settings_verified':True,'rpm_soft_mask_alpha_rms_error':error,
               'warning_count':len(warnings),'non_catalogue_warnings':other,
               'in_game_test':f'Pending for v{version}'}

@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <swofty/fake_hud.hpp>
 #include <swofty/fake_live.hpp>
@@ -31,6 +32,29 @@ int main()
     hud.clear();
     dial.frame();
     assert(hud.writes().empty());
+
+    car.have |= SWOFTY_LIVE_HAVE_ERS_STORE | SWOFTY_LIVE_HAVE_ERS_POWER;
+    car.ers_store = 3e6f;
+    car.ers_capacity = 4e6f;
+    car.ers_deploy = 20000;
+    dial.frame();
+    assert(hud.text(prefix + "energy_status") == "75%  DEPLOY");
+    car.ers_harvest_k = 40000;
+    dial.frame();
+    assert(hud.text(prefix + "energy_status") == "75%  HARVEST");
+    car.ers_deploy = 39500;
+    dial.frame();
+    assert(hud.text(prefix + "energy_status") == "75%");
+    car.ers_deploy = std::numeric_limits<float>::quiet_NaN();
+    dial.frame();
+    assert(hud.text(prefix + "energy_status") == "75%");
+    car.have &= ~SWOFTY_LIVE_HAVE_ERS_STORE;
+    car.ers_deploy = 0;
+    dial.frame();
+    assert(hud.text(prefix + "energy_status") == "HARVEST");
+    car.have &= ~SWOFTY_LIVE_HAVE_ERS_POWER;
+    dial.frame();
+    assert(hud.text(prefix + "energy_status").empty());
 
     for (int gear = 1; gear <= 8; ++gear) {
         car.gear = gear;

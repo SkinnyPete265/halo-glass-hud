@@ -10,7 +10,7 @@ from unittest.mock import patch
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT))
+sys.path[:0] = [str(ROOT / "tools"), str(ROOT)]
 import prepare_runtime
 import native_interop as native
 from formats import erpw,idf,pkg,uinode as N,uiops as U
@@ -303,15 +303,13 @@ class InstrumentRefinementTests(unittest.TestCase):
                     self.assertGreater(sign*(sweep_end-face_tip),0.)
 
     def test_active_pedal_masks_keep_slat_interiors_and_clear_gaps(self):
-        from halo import preview_instruments as hud
+        idle = art._idle_slats_layer().getchannel('A')
         runtime_masks={side:feature_assets.pedal_mask(side).getchannel('A')
                        for side in (-1,1)}
         self.assertEqual(runtime_masks[-1].tobytes(),
                          runtime_masks[1].transpose(Image.Transpose.FLIP_LEFT_RIGHT).tobytes())
         for side in (-1,1):
             runtime=runtime_masks[side]
-            texture,position=hud.pedal_surface('brake' if side<0 else 'throttle')
-            preview=texture.getchannel('A')
             centres=[]
             for index in range(10):
                 points=geo.slat_points(side,index)
@@ -320,9 +318,7 @@ class InstrumentRefinementTests(unittest.TestCase):
                 px=round((.5+(x-geo.CX)/geo.PEDAL_MASK_SPAN)*runtime.width-.5)
                 py=round((.5+(y-geo.CY)/geo.PEDAL_MASK_SPAN)*runtime.height-.5)
                 self.assertGreaterEqual(runtime.getpixel((px,py)),250)
-                preview_x=round(x*art.S)-position[0]
-                preview_y=round(y*art.S)-position[1]
-                self.assertEqual(preview.getpixel((preview_x,preview_y)),255)
+                self.assertEqual(idle.getpixel((round(x*art.S),round(y*art.S))),55)
                 centres.append((x,y))
             for first,second in zip(centres,centres[1:]):
                 x=(first[0]+second[0])/2
@@ -333,10 +329,9 @@ class InstrumentRefinementTests(unittest.TestCase):
                 # its Lanczos footprint can leave a faint antialias fringe.
                 # Keep the centre of every inter-slat gap effectively clear.
                 self.assertLessEqual(runtime.getpixel((px,py)),16)
-                preview_x=round(x*art.S)-position[0]
-                preview_y=round(y*art.S)-position[1]
-                self.assertEqual(preview.crop((preview_x-1,preview_y-1,
-                                               preview_x+2,preview_y+2)).getextrema(),(0,0))
+                idle_x,idle_y=round(x*art.S),round(y*art.S)
+                self.assertEqual(idle.crop((idle_x-1,idle_y-1,
+                                            idle_x+2,idle_y+2)).getextrema(),(0,0))
 
     def test_rpm_tip_profile_is_rounded_and_follows_the_arc(self):
         from halo import rpm_mask

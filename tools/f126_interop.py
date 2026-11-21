@@ -111,10 +111,10 @@ def straight_mode(archive, reference, scene, dial_child, controls, ctx):
     boost.items[N.LAYOUT].items=[]
     boost.items[N.EVENTS].items=[]
     for state in BOOST_STATES:
-        gate='boost_'+state
+        gate='boost_'+state.lower()
         controls.items[N.CHILDREN].items.append(U.hidden(gate,ctx.prefix+'_'+gate))
         boost.items[N.EVENTS].items.append(U.event(state,[
-            U.sig(prefix+'boost_'+other,'show' if other==state else 'hide',state)
+            U.sig(prefix+'boost_'+other.lower(),'show' if other==state else 'hide',state)
             for other in BOOST_STATES]))
     controls.items[N.CHILDREN].items.append(boost)
 
@@ -144,7 +144,7 @@ def straight_mode(archive, reference, scene, dial_child, controls, ctx):
         N.child(controls,'t_'+name).items[N.PROPS].set('colourOverride',U.prop('rgba','#'+''.join(f'{v:02x}' for v in colour)))
     if layout.STYLE['text_colour'] != '#ffffff':
         colour = '#' + layout.STYLE['text_colour'][1:] + 'ff'
-        for name in ('overtake_on', 'overtake_off', *(f'boost_text_{state}' for state in BOOST_STATES)):
+        for name in ('overtake_on', 'overtake_off', *(f'boost_text_{state.lower()}' for state in BOOST_STATES)):
             N.child(controls, 't_' + name).items[N.PROPS].set('colourOverride', U.prop('rgba', colour))
     idf.set_param(root.find(ctx.prefix+'_sm_button').obj,'style','icons_tool_tips')
     N.child(controls,'t_sm_keyboard').items[N.PROPS].set('localise',

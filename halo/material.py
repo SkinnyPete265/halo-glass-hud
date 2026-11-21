@@ -262,40 +262,6 @@ def wing_texture_frame(image, padding=None, top_padding=None):
     return frame
 
 
-def preview_finish(image):
-    """Render the HUD with transparent room for the wing-edge extensions."""
-    from . import layout as geo
-    padding = geo.WING_TEXTURE_PADDING
-    frame_width = WIDTH + 2 * padding
-    top_padding = max(0., image.height / S - HEIGHT)
-    frame_height = HEIGHT + top_padding
-    frame = wing_texture_frame(image, padding, top_padding)
-    result = frame.resize((frame_width, round(frame_height)), Image.Resampling.LANCZOS)
-    scale = geo.HUD_SIZE_FACTOR
-    resized = result.resize(
-        (round(frame_width * scale), round(frame_height * scale)),
-        Image.Resampling.LANCZOS,
-    )
-    paste_x = round((CX + padding) * (1 - scale))
-    paste_y = round(CY - (CY + top_padding) * scale)
-    bounds = resized.getchannel('A').getbbox()
-    if bounds is None:
-        return Image.new('RGBA', (frame_width, round(frame_height)))
-    margin = 4
-    left_pad = max(0, margin - (paste_x + bounds[0]))
-    right_pad = max(0, paste_x + bounds[2] + margin - frame_width)
-    top_pad = max(0, margin - (paste_y + bounds[1]))
-    bottom_pad = max(0, paste_y + bounds[3] + margin - HEIGHT)
-    output = Image.new(
-        'RGBA',
-        (frame_width + left_pad + right_pad,
-         round(frame_height) + top_pad + bottom_pad),
-    )
-    # Copy the RGBA pixels directly. Using the same image as a paste mask
-    # multiplies its alpha by itself and makes every translucent contour fade.
-    output.paste(resized, (paste_x + left_pad, paste_y + top_pad))
-    return output
-
 def rounded_stroke(image, points, colour, width=1., glow=0.):
     """Antialiased line and round caps share one continuous coverage mask."""
     padding = math.ceil((width / 2 + glow * 3 + 2) * S)

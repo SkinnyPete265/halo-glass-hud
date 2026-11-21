@@ -1,7 +1,7 @@
 """Centre-out DRS highlight study using a soft, trailing native-mask profile."""
 from functools import lru_cache
 import math
-from PIL import Image, ImageChops
+from PIL import Image
 from . import artwork as art, layout as geo, material as mat, feature_assets
 
 PERIOD = 1.0
@@ -90,21 +90,3 @@ def mask_texture(side, width=256, height=8):
         values.append((255,255,255,alpha))
     image.putdata(values*height)
     return image
-
-
-def draw(image,phase,opacity=1.0,reveal=1.0):
-    highlight=surface().copy()
-    centre=window_centre(phase)
-    inner_x, outer_x = rail_limits()
-    values=[]
-    limit=inner_x-geo.CX+(outer_x-inner_x)*reveal
-    for x in range(highlight.width):
-        radius=abs(x/art.S-geo.CX)
-        u=.5+(radius-centre)/WINDOW_WIDTH
-        fade=max(0.,min(1.,(limit+3.-radius)/6.)) if reveal<1. else 1.
-        values.append(round(255*mask_weight(u)*fade*opacity*reveal))
-    mask=Image.new('L',(highlight.width,1))
-    mask.putdata(values)
-    mask=mask.resize(highlight.size,Image.Resampling.NEAREST)
-    highlight.putalpha(ImageChops.multiply(highlight.getchannel('A'),mask))
-    image.alpha_composite(highlight)

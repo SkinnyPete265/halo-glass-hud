@@ -39,6 +39,16 @@ Redistribution permissions for the captured game-derived resources have not
 been established in this project. Their presence in development packages is
 recorded here for the public-release provenance review.
 
+For a public package, audit both the authoring inputs and the runtime
+overlays. Start from native/reference/native-controls-source.json for the
+component list and runtime/overlays.json for the target archives. For each
+game-derived resource, record its source and redistribution permission, or
+identify how to compose it locally from the player's install. Excluding the
+reference files from the ZIP alone leaves game-derived fragments in the
+runtime overlays. Verify the distributable archive's actual contents before
+submitting it. Keep compatibility claims tied to tested platforms, builds,
+and seasons.
+
 ## Local reference media
 
 The local design/reference folder contains visual reference captures used by
