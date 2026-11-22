@@ -110,12 +110,16 @@ def straight_mode(archive, reference, scene, dial_child, controls, ctx):
     boost.items[N.CHILDREN].items=[]
     boost.items[N.LAYOUT].items=[]
     boost.items[N.EVENTS].items=[]
+    for name in ('wing_mode','wing_boost'):
+        controls.items[N.CHILDREN].items.append(U.hidden(name,ctx.prefix+'_'+name+'_n'))
     for state in BOOST_STATES:
         gate='boost_'+state.lower()
         controls.items[N.CHILDREN].items.append(U.hidden(gate,ctx.prefix+'_'+gate))
         boost.items[N.EVENTS].items.append(U.event(state,[
             U.sig(prefix+'boost_'+other.lower(),'show' if other==state else 'hide',state)
-            for other in BOOST_STATES]))
+            for other in BOOST_STATES]+[
+            U.sig(prefix+'wing_boost','show' if state=='eActive' else 'hide',state),
+            U.sig(prefix+'wing_mode','hide' if state=='eActive' else 'show',state)]))
     controls.items[N.CHILDREN].items.append(boost)
 
     # Crisp native text with a restrained four-sample glow around SM OPEN.
@@ -177,4 +181,4 @@ def straight_mode(archive, reference, scene, dial_child, controls, ctx):
             'eligibility':'native game rules','opening_seconds':layout.DRS_OPEN_DURATION,
             'closing_seconds':layout.DRS_CLOSE_DURATION,'overtake':'om_active',
             'boost':'ers_overtake_state','boost_events':list(BOOST_STATES),
-            'temporary_status':True,'rail_colour':'existing green'}
+            'circle_status':True,'rail_colour':'existing green'}

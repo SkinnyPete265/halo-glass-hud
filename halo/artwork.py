@@ -119,8 +119,6 @@ def base_static(rpm_width, wing_extension=None, wing_content_follow=None,
 def base(race_variant=None):
     image=base_static(geo.RPM_BAR_WIDTH,geo.STYLE['wing_extension'],
                       geo.STYLE['wing_content_follow'],S,race_variant).copy()
-    label(image,geo.KPH,"KPH",y_offset=geo.ARTWORK_TOP_PADDING,
-          color=(176,211,232,240))
     label(image,geo.gears_caption(),'GEARS',weight=geo.GEARS_FONT_WEIGHT,glow=True,
           y_offset=geo.ARTWORK_TOP_PADDING,
           color=rgb(geo.STYLE['gears_colour'])+(255,),

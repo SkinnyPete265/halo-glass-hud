@@ -138,6 +138,22 @@ class Text:
 
 SPEED = Text(CX, STYLE['speed_y'], STYLE['speed_size'])
 KPH = Text(CX, CY - 34.0, 15.0)
+
+
+def circle_speed(season26):
+    return Text(SPEED.x, SPEED.y - (28 if season26 else 0), SPEED.size)
+
+
+def circle_readouts(season26):
+    return (
+        ('kph_unit', Text(CX, KPH.y - (14 if season26 else 0), KPH.size), 'KPH'),
+        ('mph', Text(CX, CY + 22, 19.), None),
+        ('mph_unit', Text(CX, CY + 34, 10.), 'MPH'),
+    )
+
+
+BOOST_STATUS = Text(CX, CY - 7, 10.)
+OVERTAKE_STATUS = Text(CX, CY + 6, 10.)
 SPECIAL_GEAR = Text(CX, CY + 72.0, 19.0)
 GEAR_ROW_OFFSET = 57.0
 GEAR_NUMBER_SIZE = 17.0 * 0.97 * 1.02

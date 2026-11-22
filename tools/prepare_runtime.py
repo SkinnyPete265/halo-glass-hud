@@ -256,7 +256,8 @@ def validate_editor_preview(archive, templates):
         raise ValueError('Shared editor preview sector label set is incomplete')
     if 'halo_v2_pv_battery_charge_win' not in preview_names:
         raise ValueError('Shared editor preview is missing its battery charge mask')
-    if 'halo_v2_pv_energy_status' not in preview_names:
+    if any('halo_v2_pv_'+name not in preview_names for name in ('wing_charge','wing_flow',
+            'wing_mode','wing_deploy_kw','wing_harvest_kw','wing_energy_fill_win','mph')):
         raise ValueError('Shared editor preview is missing its battery energy readout')
 
     preview_materials = {
@@ -332,7 +333,9 @@ def validate_editor_preview(archive, templates):
     expected_sample = {
         'game.ers_stored': .75,
         'game.has_ers': True,
-        'view_model_data.hud_halo_v2_energy_status': '75%  DEPLOY',
+        'view_model_data.hud_halo_v2_charge': '75%',
+        'view_model_data.hud_halo_v2_flow': 'DEPLOYING',
+        'view_model_data.hud_halo_v2_mph': '155',
     }
     for key in ('glass_dial', 'glass_dial_26'):
         preview_values = records[key].get('editor', {}).get('preview', {})

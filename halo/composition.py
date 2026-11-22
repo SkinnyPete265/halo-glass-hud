@@ -6,7 +6,7 @@ from .asset_cache import AssetCache
 from tools.build_inputs import artwork_source_fingerprint
 from .tuning import values
 from . import artwork as art, layout as geo
-from . import feature_assets, instruments, sectors, drs_motion, rpm_mask
+from . import energy_panel, feature_assets, instruments, sectors, drs_motion, rpm_mask
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "view_model_data.hud_halo_v2_"
@@ -63,6 +63,8 @@ def write():
             return ('wing_extension','wing_content_follow','text_size','text_colour','text_glow','text_glow_strength','text_outline')
         if name.startswith('drs_'):
             return ('wing_extension',)
+        if name.startswith('wing_energy'):
+            return ('wing_extension','wing_content_follow','hud_size')
         if name.startswith('battery_'):
             return ('battery_width','battery_height','battery_y')
         if name in ('rpm_fill','rpm_fill_mask'):
@@ -103,7 +105,7 @@ def write():
 
 
     elements = [{"kind": "sprite", "id": "base", "sprite": "base", "layer": 20}]
-    preview = {"game.speed_str": "250", "game.revs": .89, "game.ers_stored": .75,
+    preview = {PREFIX + "kph": "250", PREFIX + "mph": "155", "game.revs": .89, "game.ers_stored": .75,
                "game.has_ers": True, PREFIX + "rpm": "11585",
                PREFIX + "drs_reveal": 0.0, PREFIX + "drs_visible": False}
     for gear in range(1, 9):
@@ -125,7 +127,7 @@ def write():
     raw_sprite('rpm_fill_mask',rpm_mask.texture,geo.hud_bounds([0,0,*rpm_mask.TEXTURE_SIZE]))
     number_at,unit_at=instruments.rpm_labels(11585)
     for name, spec, value, box in (
-        ("speed", geo.SPEED, {"game": "speed_str"}, 52),
+        ("speed", geo.SPEED, {"view_model": PREFIX + "kph"}, 52),
         ("rpm_value", number_at, {"view_model": PREFIX + "rpm"}, 22),
         ("rpm_unit", unit_at, {"literal": "RPM"}, 12),
         ("brake_label", geo.pedal_label(-1), {"literal": "BRAKE"}, 20),
@@ -177,14 +179,30 @@ def write():
             sprite(name,lambda:feature_assets.battery_layers()[part],geo.BATTERY_TEXTURE_RESOLUTION)
             battery.append({"kind":"sprite","id":name,"sprite":name,
                             "layer":27 if part=="bolt" else 24 if part=="housing" else 25})
-    bx, by = geo.BATTERY_CENTRE
-    battery.append({
-        "kind": "text", "id": "energy_status", "style": "OSD_24_bold",
-        "align": "centre", "box": 96 * size_ratio, "cap_height": 8 * size_ratio,
-        "at": geo.hud_point(bx, by - geo.BATTERY_HEIGHT / 2 - 5),
-        "value": {"view_model": PREFIX + "energy_status"}, "layer": 27,
-    })
-    preview[PREFIX + "energy_status"] = "75%  DEPLOY"
+    for name, spec, caption in geo.circle_readouts(False):
+        elements.append(energy_panel.text_record(name,spec,72,literal=caption,leaf=name,prefix=PREFIX))
+
+    sprite('wing_energy_track',energy_panel.track,art.S)
+    panel = [{'kind':'sprite','id':'wing_energy_track','sprite':'wing_energy_track','layer':24}]
+    left, right = energy_panel.rail_limits()
+    window = right - left + 20
+    for name, producer, layer in (('wing_energy_glow',energy_panel.rail_glow,25),
+                                  ('wing_energy_fill',energy_panel.fill,26)):
+        sprite(name,producer,art.S,resample=Image.Resampling.BOX)
+        rail = gauge(name,name,{'game':'ers_stored'})
+        rail['layer'] = layer
+        rail['window'][0] = window * geo.HUD_SCALE
+        for end, x in zip(rail['path'],(left,right)):
+            end[0] = geo.hud_point(x-window/2,0)[0]
+        panel.append(rail)
+    raw_sprite('wing_energy_front',lambda:energy_panel.front_mask(window),geo.hud_bounds([0,0,1024,8]))
+    for name, (_,_,_,width) in energy_panel.ROWS.items():
+        panel.append(energy_panel.text_record('wing_'+name,energy_panel.text_anchor(name),width,
+            literal=energy_panel.CAPTIONS.get(name),leaf=name,prefix=PREFIX))
+    elements.append({'kind':'group','id':'wing_energy','visible':{'game':'has_ers'},'children':panel})
+    preview.update({PREFIX+key:value for key,value in {
+        'charge':'75%', 'mode':'HOTLAP', 'flow':'DEPLOYING',
+        'deploy_kw':'116','harvest_kw':'22'}.items()})
     # These two standalone assets are redirected only into the editor preview
     # during runtime preparation. Bake its 75% battery tint without changing
     # either game's live material or native colour animation.

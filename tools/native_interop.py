@@ -5,9 +5,10 @@ import struct
 import uuid
 from pathlib import Path
 from formats import erpw, idf, pkg, uinode as N, uiops as U
-from halo import layout, instruments, material, sectors, drs_motion, rpm_mask
+from halo import layout, energy_panel, instruments, material, sectors, drs_motion, rpm_mask
 from halo.tuning import rgb
 from halo.dials import F125, F126
+from halo.f126 import BOOST_STATES
 
 ROOT = Path(__file__).resolve().parents[1]
 DIAL = 'eaid://ui_package/art/osd/components/dial/'
@@ -519,10 +520,16 @@ def centre_text_readouts(scene, reference, controls=None, ctx=F125):
             N.child(controls, 't_' + name).items[N.PROPS].set(
                 'colourOverride', U.prop('rgba', colour))
     readouts = [
-            ('speed', layout.SPEED), ('rpm_value', number), ('rpm_unit', unit),
+            ('speed', layout.circle_speed(ctx != F125)), ('rpm_value', number), ('rpm_unit', unit),
             ('brake_label', layout.pedal_label(-1)),
             ('throttle_label', layout.pedal_label(1)), ('special_gear', layout.SPECIAL_GEAR),
             ('drs_open_label', layout.Text(*layout.DRS_CENTRE,layout.DRS_STATUS_TEXT_SIZE))]
+    readouts.extend((name,spec) for name,spec,_ in layout.circle_readouts(ctx != F125))
+    readouts.extend(('wing_'+name,energy_panel.text_anchor(name)) for name in energy_panel.ROWS)
+    if ctx != F125:
+        readouts.append(('wing_boost',energy_panel.text_anchor('mode')))
+        readouts.extend(('boost_text_'+state.lower(),layout.BOOST_STATUS) for state in BOOST_STATES)
+        readouts.extend(('overtake_'+state,layout.OVERTAKE_STATUS) for state in ('on','off'))
     readouts.extend((glyph.name, glyph.anchor) for glyph in sectors.glyphs())
     for name, spec in readouts:
         holder = scene.scenes[0].root.find((ctx.prefix + '_') + name + '_n').obj
@@ -837,6 +844,15 @@ def apply(scene_archive, template_archive, ctx=F125):
     tip=rpm_tip_motion(scene_archive,reference,scene,ctx)
     gears = gear_transitions(scene, controls, ctx=ctx)
     pedals(scene_archive, reference, scene, ctx=ctx)
+    front = 'eaid://ui_package/art/osd/textures/hud/'+ctx.prefix+'_wing_energy_front.tif'
+    for name in ('wing_energy_fill','wing_energy_glow'):
+        soft_mask(scene_archive, reference, scene, ctx.prefix+'_'+name+'_win', front)
+        for part in ('win','ctr'):
+            N.child(controls,'x_'+name+'_'+part).items[N.PROPS].set('fraction',U.prop('fp32',0.,'ers_stored'))
+    for name in ('mode','flow','deploy_kw','deploy_caption','harvest_kw','harvest_caption'):
+        colour = energy_panel.GREEN if name.startswith('harvest') else energy_panel.ICE
+        N.child(controls,'t_wing_'+name).items[N.PROPS].set('colourOverride',
+            U.prop('rgba','#%02x%02x%02xff' % colour))
     battery = battery_colours(scene_archive, reference, scene, controls, dial_child, ctx=ctx)
     if ctx == F125:
         status = drs(scene_archive, reference, scene, f1, dial_child, controls)
