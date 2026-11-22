@@ -53,7 +53,9 @@ paths come from the ignored `project.local.json`.
 - Build test candidates from their exact approved SHA on `dev/hud-dev` and
   record the owner's in-game result against it. Open a PR from `dev/hud-dev`
   into `main` only when a release checkpoint is ready. Summarize the changes
-  and verification in that PR. Preserve meaningful commits when merging.
+  and verification in that PR. Add a `Commits` section with one bullet for each
+  commit the PR introduces to `main`. Include its short SHA and a brief
+  description of what changed. Preserve meaningful commits when merging.
 - Use the changelog to summarize each version. After in-game approval, track the
   version and changelog in a separate release metadata commit. When publishing,
   tag the exact commit that produced the verified package.
