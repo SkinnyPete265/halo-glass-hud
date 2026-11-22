@@ -108,6 +108,21 @@ def write():
     preview = {PREFIX + "kph": "250", PREFIX + "mph": "155", "game.revs": .89, "game.ers_stored": .75,
                "game.has_ers": True, PREFIX + "rpm": "11585",
                PREFIX + "drs_reveal": 0.0, PREFIX + "drs_visible": False}
+    pedal_gate = PREFIX+'pedals_stepped'
+    preview[pedal_gate] = False
+    elements.append({'kind':'group','id':'pedal_gradual',
+                     'visible':{'view_model':pedal_gate,'not':True,'default':False},'children':[]})
+    banks = []
+    for side, name in ((-1,'brake'),(1,'throttle')):
+        slats = []
+        for index in range(10):
+            key = f'lit_{name}_{index+1:02d}'
+            sprite(key,lambda side=side,index=index:feature_assets.pedal_slat(side,index))
+            slats.append(key)
+        banks.append({'kind':'slats','id':name+'_steps','sprites':slats,
+                      'show':PREFIX+name+'{nn}','layer':25})
+    elements.append({'kind':'group','id':'pedal_stepped','visible':{'view_model':pedal_gate},
+                     'children':banks})
     for gear in range(1, 9):
         for selected in (False, True):
             name = f"gear_{gear}_{'active' if selected else 'idle'}"

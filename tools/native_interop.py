@@ -85,13 +85,13 @@ def component(archive, reference, source, destination, material_source):
     return resource, scene
 
 
-def attach_native(scene, slot, destination, ctx=F125):
+def attach_native(scene, slot, destination, ctx=F125, parent=None):
     element = detach_scene(scene.scenes[0].root, slot)
     idf.retarget(element, destination)
     scale = layout.HUD_SCALE * .018 / .0065
     element.set('position', pkg.Val('vec3', [.117 * scale, -1.1875 * scale, 0., 0.]))
     element.set('scale', pkg.Val('vec3', [scale, scale, 1., 0.]))
-    scene.scenes[0].root.find(ctx.prefix).obj['children'].items.append(element)
+    scene.scenes[0].root.find(parent or ctx.prefix).obj['children'].items.append(element)
 
 
 def pedals(archive, reference, scene, ctx=F125):
@@ -137,7 +137,7 @@ def pedals(archive, reference, scene, ctx=F125):
             replace_prefix(animations, source, destination)
     refresh_scene(native)
     archive.set_frag(resource, 0, native.to_bytes())
-    attach_native(scene, 'engine_meters', destination, ctx=ctx)
+    attach_native(scene, 'engine_meters', destination, ctx=ctx, parent=ctx.prefix+'_pedal_gradual')
 
 
 def soft_mask(archive, reference, scene, name, texture):

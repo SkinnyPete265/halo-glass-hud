@@ -75,6 +75,33 @@ int main()
     dial.frame();
     assert(hud.text(prefix+"mph") == "-");
 
+    const auto pedals = [&](bool stepped, int brake, int throttle) {
+        assert(hud.number(prefix+"pedals_stepped") == stepped);
+        for (int i=1; i<=10; ++i) {
+            std::string suffix = (i<10 ? "0" : "") + std::to_string(i);
+            assert(hud.number(prefix+"brake"+suffix) == (i<=brake));
+            assert(hud.number(prefix+"throttle"+suffix) == (i<=throttle));
+        }
+    };
+    car.have |= SWOFTY_LIVE_HAVE_PEDALS;
+    car.brake = .45f; car.throttle = .74f;
+    dial.frame(); pedals(false,0,0);
+    dial.use_stepped_pedals(true);
+    dial.frame(); pedals(true,5,7);
+    hud.rebuild(); pedals(true,5,7);
+    car.brake = 0; car.throttle = 1;
+    dial.frame(); pedals(true,0,10);
+    car.brake = std::numeric_limits<float>::quiet_NaN();
+    dial.frame(); pedals(false,0,0);
+    car.brake = 1; car.throttle = 0;
+    dial.frame(); pedals(true,10,0);
+    car.have &= ~SWOFTY_LIVE_HAVE_PEDALS;
+    dial.frame(); pedals(false,0,0);
+    car.have |= SWOFTY_LIVE_HAVE_PEDALS;
+    dial.frame(); pedals(true,10,0);
+    dial.use_stepped_pedals(false);
+    dial.frame(); pedals(false,0,0);
+
     for (int gear = 1; gear <= 8; ++gear) {
         car.gear = gear;
         dial.frame();

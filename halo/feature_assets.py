@@ -184,3 +184,20 @@ def pedal_mask(side, size=512):
     result = Image.new('RGBA', (size, size), (255, 255, 255, 0))
     result.putalpha(alpha)
     return result
+
+
+def pedal_slat(side, index):
+    """One complete lit slat using the idle geometry and active artwork filter."""
+    points = geo.slat_points(side,index)
+    left = math.floor(min(x for x,y in points))-2
+    top = math.floor(min(y for x,y in points))-2
+    right = math.ceil(max(x for x,y in points))+2
+    bottom = math.ceil(max(y for x,y in points))+2
+    size = ((right-left)*S,(bottom-top)*S)
+    mask = Image.new('L',size)
+    ImageDraw.Draw(mask).polygon([(round((x-left)*S),round((y-top)*S)) for x,y in points],fill=255)
+    layer = Image.new('RGBA',size,(249,72,70) if side<0 else (83,234,151))
+    layer.putalpha(mat._box_filter_alpha_3x3(mask))
+    result = art.canvas()
+    result.alpha_composite(layer,(left*S,top*S))
+    return result

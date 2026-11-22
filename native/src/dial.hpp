@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <swofty/hud_leaves.hpp>
@@ -7,6 +8,8 @@
 namespace halo {
 class Dial {
 public:
+    void use_stepped_pedals(bool enabled) { stepped_preference_.store(enabled); }
+
     void frame()
     {
         const auto car = swofty::live::available() ? swofty::live::subject() : std::nullopt;
@@ -54,8 +57,14 @@ public:
                 format_number(mph, car->speed * 2.236936292);
             }
         }
+        const bool stepped = stepped_preference_.load() && car &&
+            swofty::live::has(*car, SWOFTY_LIVE_HAVE_PEDALS) &&
+            valid_pedal(car->throttle) && valid_pedal(car->brake);
         {
             swofty::hud::Leaves::Atomic update(leaves_);
+            leaves_.set(stepped_, stepped);
+            leaves_.set(brake_, stepped ? int(std::lround(car->brake * 10)) : 0);
+            leaves_.set(throttle_, stepped ? int(std::lround(car->throttle * 10)) : 0);
             leaves_.set(gears_, selected);
             leaves_.set(special_, special);
             leaves_.set(rpm_, rpm);
@@ -71,6 +80,9 @@ public:
     }
 
 private:
+    std::atomic<bool> stepped_preference_{false};
+    static bool valid_pedal(float value) { return value >= 0 && value <= 1; }
+
     static void format_number(char (&out)[8], double value)
     {
         if (std::isfinite(value)) {
@@ -82,6 +94,9 @@ private:
     }
 
     swofty::hud::Leaves leaves_{"view_model_data.hud_halo_v2_"};
+    swofty::hud::BoolLeaf stepped_ = leaves_.boolean("pedals_stepped");
+    swofty::hud::Level brake_ = leaves_.level("brake", 10);
+    swofty::hud::Level throttle_ = leaves_.level("throttle", 10);
     swofty::hud::OneHot gears_ = leaves_.one_hot("gear", 8, 0, 1);
     swofty::hud::TextLeaf special_ = leaves_.text("special_gear", 2);
     swofty::hud::TextLeaf rpm_ = leaves_.text("rpm", 6);

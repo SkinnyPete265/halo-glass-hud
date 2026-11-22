@@ -24,6 +24,19 @@
   "experimental_features": [
     "telemetry"
   ],
+  "options": [
+    {
+      "id": "pedal_fill",
+      "type": "choice",
+      "label": "Pedal fill",
+      "values": [
+        {"value": "gradual", "label": "Gradual"},
+        {"value": "stepped", "label": "Stepped"}
+      ],
+      "default": "gradual",
+      "binds": "native"
+    }
+  ],
   "operations": {
     "hud": [
       "registry/hud.json"
