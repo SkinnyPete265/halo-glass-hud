@@ -31,10 +31,18 @@ def refresh_style():
         (0.35, BATTERY_BLUE), (1.00, BATTERY_BLUE),
     )
 
-def battery_colour(charge):
+def battery_keys(part):
+    if part == 'frame':
+        # The reference rim is a lighter tint of the normal-charge blue.
+        rim = tuple(round(c + (255-c)*.52) for c in BATTERY_BLUE)
+        return tuple((t, rim if t >= .35 else c) for t,c in BATTERY_COLOUR_KEYS)
+    return BATTERY_COLOUR_KEYS
+
+
+def battery_colour(charge, part='fill'):
     charge = max(0.0, min(1.0, charge))
-    for (lower, first), (upper, second) in zip(
-            BATTERY_COLOUR_KEYS, BATTERY_COLOUR_KEYS[1:]):
+    keys = battery_keys(part)
+    for (lower, first), (upper, second) in zip(keys, keys[1:]):
         if charge <= upper:
             weight = (charge - lower) / (upper - lower)
             return tuple(round(a + (b - a) * weight)

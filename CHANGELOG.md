@@ -2,6 +2,19 @@
 
 Development and beta builds use the same versioned notes intended for future releases.
 
+## 0.16.0-dev1
+
+### New/Added
+
+- Added a left-wing battery display with charge, mode, deployment, harvesting, and power readings.
+- Added simultaneous KPH and MPH readouts to both dials.
+- Added a per-profile choice between gradual and stepped brake and throttle slats.
+
+### Fixes
+
+- Kept F1 26 Boost and Overtake indicators independent.
+- Restored stock primary speed when the native Live speed is unavailable.
+
 ## 0.16.0
 
 ### New/Added

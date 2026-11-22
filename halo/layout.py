@@ -91,10 +91,11 @@ DRS_CLOSE_CURVE = 'generic_fade_off_fast'
 HUD_BOX_BOTTOM = max(422.0, wing_backing_bounds(WING_EFFECT_END)[1] + 34.0)
 BATTERY_CENTRE = (CX, STYLE['battery_y'])
 BATTERY_WIDTH, BATTERY_HEIGHT = STYLE['battery_width'], STYLE['battery_height']
-BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .28
+BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .16
 BATTERY_TEXTURE_RESOLUTION = 3
 BATTERY_FILL_FEATHER = 0.0
-BATTERY_FILL_INSET = 3.0
+# Let the fill meet the one-pixel rim with one supersampled texel of overlap.
+BATTERY_FILL_INSET = 1.0 - 1.0 / BATTERY_TEXTURE_RESOLUTION
 DRS_CENTRE = (CX, 211.0)
 # All DRS status text uses the same native family as the HUD readouts.
 DRS_STATUS_TEXT_SIZE = 17.5
@@ -123,9 +124,10 @@ def battery_fill_edge(charge):
 
 def battery_bolt_points():
     cx, cy = BATTERY_CENTRE
-    return [(cx + .7, cy - 4.7), (cx - 3.6, cy + .3),
-            (cx - .4, cy + .3), (cx - 1.0, cy + 4.7),
-            (cx + 3.9, cy - .9), (cx + .9, cy - .9)]
+    # A narrow, forward-leaning flash with an offset kink, traced from the reference.
+    points = [(2.9,-5.8), (-3.3,.4), (-.4,.4), (-2.4,5.8), (3.2,-.8), (.5,-.8)]
+    scale = BATTERY_HEIGHT / 23.5
+    return [(cx+x*scale,cy+y*scale) for x,y in points]
 
 FONT_PATH = "assets/fonts/Saira/Saira.ttf"
 
@@ -137,8 +139,24 @@ class Text:
     rotation: float = 0.0
 
 SPEED = Text(CX, STYLE['speed_y'], STYLE['speed_size'])
-KPH = Text(CX, CY - 34.0, 15.0)
-SPECIAL_GEAR = Text(CX, CY + 72.0, 19.0)
+KPH = Text(CX, CY - 57., 14.)
+
+
+def circle_speed(season26):
+    return Text(SPEED.x, SPEED.y - 34., SPEED.size)
+
+
+def circle_readouts(season26):
+    return (
+        ('kph_unit', KPH, 'KM/H'),
+        ('mph', Text(CX, CY + 37., SPEED.size * .77), None),
+        ('mph_unit', Text(CX, CY + 55., 14.), 'MPH'),
+    )
+
+
+BOOST_STATUS = Text(CX, CY - 5., 13.)
+OVERTAKE_STATUS = Text(CX, CY + 12., 13.)
+SPECIAL_GEAR = Text(CX - 46., CY + 76., 14.)
 GEAR_ROW_OFFSET = 57.0
 GEAR_NUMBER_SIZE = 17.0 * 0.97 * 1.02
 GEAR_SELECTED_SIZE = 27.0 * 0.97 * 1.05
@@ -288,7 +306,7 @@ def refresh_style(style=None):
     BATTERY_CENTRE = (CX, STYLE['battery_y'])
     BATTERY_WIDTH = STYLE['battery_width']
     BATTERY_HEIGHT = STYLE['battery_height']
-    BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .28
+    BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .16
     DRS_PROMPT_OUTLINE_RADIUS = .4 * STYLE['text_outline']
     DRS_PROMPT_OUTLINE_ALPHA = round(85 * STYLE['text_glow_strength'] / 100.)
     DRS_LABEL_GLOW_RADIUS = .7 * STYLE['text_glow']

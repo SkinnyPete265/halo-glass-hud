@@ -35,6 +35,11 @@ paths come from the ignored `project.local.json`.
   HUD scale. Use source and decoded assets for offline diagnostics.
 - Run focused checks for the change. Recompile affected DLLs and run native tests
   for C++ edits. Reuse validated assets and DLLs for unrelated changes.
+- Every development handoff asks the implementing agent for a verification
+  handoff. Request the exact branch and commit, a summary mapped to the requested
+  changes, the SWOFTY version verified, checks and their results, links to relevant
+  logs or screenshots, and any gaps, warnings, or decisions that need review.
+  Include the package and install status and the remaining in-game checks.
 
 ## Git history
 
@@ -48,7 +53,9 @@ paths come from the ignored `project.local.json`.
 - Build test candidates from their exact approved SHA on `dev/hud-dev` and
   record the owner's in-game result against it. Open a PR from `dev/hud-dev`
   into `main` only when a release checkpoint is ready. Summarize the changes
-  and verification in that PR. Preserve meaningful commits when merging.
+  and verification in that PR. Add a `Commits` section with one bullet for each
+  commit the PR introduces to `main`. Include its short SHA and a brief
+  description of what changed. Preserve meaningful commits when merging.
 - Use the changelog to summarize each version. After in-game approval, track the
   version and changelog in a separate release metadata commit. When publishing,
   tag the exact commit that produced the verified package.
@@ -56,23 +63,29 @@ paths come from the ignored `project.local.json`.
 ## Release
 
 - Keep the manifest version, package name and CHANGELOG.md entry aligned.
-  Use `-devN` for approved development builds. Owner approval after in-game
-  testing authorizes packaging the next plain minor release. Follow the
-  numbering examples and release-note format in docs/REPOSITORY.md.
+  Bump the minor version when starting a new development cycle and use `-devN`
+  for its approved test builds. Owner approval after in-game testing authorizes
+  packaging and installing the same version with the `-devN` suffix removed.
+  Follow the numbering examples and release-note format in docs/REPOSITORY.md.
 
 - For a requested build and install, use
   `python -B tools/project.py release --install`. Add `--native` for C++
   changes. Omit `--install` when the request is for offline packaging.
 - For a GitHub candidate, dispatch Local release from main with the exact
-  approved commit and requested mode. An approval during an install review
-  authorizes that install. A design or code review approval accepts the
-  changes only. Use the install mode for test builds and report the result
-  after exact-cache verification. The owner starts F1 25 manually for testing.
+  approved commit. Use `install` mode for every approved test build and
+  release checkpoint, unless the owner explicitly requests package-only.
+  A design or code review approval accepts the changes only. Report the
+  result after exact-cache verification. The owner starts F1 25 manually.
+- For the owner's local installs, always target the `Halo-HUD-Dev` SWOFTY
+  profile through `project.local.json`, regardless of which profile is active.
 - The release helper handles composition, validation, package reuse, rollback,
   the profile snapshot and exact-cache verification. If F1 25 is open, finish
   preparation, then resume with the same command after normal game closure.
 - Use `python -B tools/project.py status` and `check` for local checks. Use
   `logs LOGFILE` for warning and failure details.
 - Report the actual SWOFTY version, package/install checks and in-game results.
+  Whenever you recommend a candidate for in-game testing or confirm it is ready,
+  give the owner a bullet checklist with one item per distinct check. Include
+  where to test it and what should happen when that matters.
   The release tool refreshes generated facts in PROJECT_STATE.md. Update its
   handoff notes in place when owner feedback or the next test changes.

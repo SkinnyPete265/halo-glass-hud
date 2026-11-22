@@ -256,8 +256,12 @@ def validate_editor_preview(archive, templates):
         raise ValueError('Shared editor preview sector label set is incomplete')
     if 'halo_v2_pv_battery_charge_win' not in preview_names:
         raise ValueError('Shared editor preview is missing its battery charge mask')
-    if 'halo_v2_pv_energy_status' not in preview_names:
+    if any('halo_v2_pv_'+name not in preview_names for name in ('wing_charge','wing_flow',
+            'wing_mode','wing_energy_fill_win','mph')):
         raise ValueError('Shared editor preview is missing its battery energy readout')
+
+    if any("wing_deploy" in name or "wing_harvest" in name for name in preview_names):
+        raise ValueError("Power columns are exclusive to the 2026 live dial")
 
     preview_materials = {
         'frame': 'eaid://ui_package/art/osd/components/hud/halo_v2_battery_preview_frame.emb?context=default',
@@ -290,7 +294,7 @@ def validate_editor_preview(archive, templates):
         decoded = Image.frombytes('RGBA', (width, height),
                                   archive.frag_data(image_resource, 1),
                                   'bcn', 7, 'BC7')
-        expected_colour = instruments.battery_colour(.75)
+        expected_colour = instruments.battery_colour(.75,part)
         visible_colours = {pixel[:3] for pixel in source.getdata() if pixel[3]}
         if visible_colours != {expected_colour}:
             raise ValueError('Editor battery ' + part + ' source sprite is not the 75% cyan tint')
@@ -332,7 +336,9 @@ def validate_editor_preview(archive, templates):
     expected_sample = {
         'game.ers_stored': .75,
         'game.has_ers': True,
-        'view_model_data.hud_halo_v2_energy_status': '75%  DEPLOY',
+        'view_model_data.hud_halo_v2_charge': '75%',
+        'view_model_data.hud_halo_v2_flow': 'DEPLOYING',
+        'view_model_data.hud_halo_v2_mph': '155',
     }
     for key in ('glass_dial', 'glass_dial_26'):
         preview_values = records[key].get('editor', {}).get('preview', {})
@@ -750,6 +756,9 @@ def validate_sector_appearance(root,paths,ctx):
 
 def validate_battery_binding(paths,ctx):
     prefix=ctx.path+'.'+ctx.prefix+'_ctl.'
+    for key in ('deploy_kw','harvest_kw','deploy_caption','harvest_caption'):
+        if (prefix+'t_wing_'+key in paths) != (ctx == F126):
+            raise ValueError('Unexpected season for wing power readout '+key)
     names=['x_battery_charge_win','x_battery_charge_ctr',
            'x_'+ctx.prefix+'_battery_frame_colour',
            'x_'+ctx.prefix+'_battery_charge_fill_colour']
@@ -823,6 +832,14 @@ def validate_f126(archive, templates):
     if (boost.items[N.PROPS]['dbEntry']['value'].value!='ers_overtake_state' or
         {e['eventName'].value for e in boost.items[N.EVENTS].items}!=set(BOOST_STATES)):
         raise ValueError('Boost state no longer matches the stock enum decision')
+    if paths[prefix+'t_wing_mode'].items[N.PROPS]['text']['dbentry'].value != '#view_model_data.hud_halo_v2_mode26':
+        raise ValueError('2026 wing must use its ordinary season mode')
+    for event in boost.items[N.EVENTS].items:
+        active = event['eventName'].value == 'eActive'
+        pins = {(s['to_object_name'].value,s['to_pin_name'].value) for s in event['signals'].items}
+        if ((prefix+'wing_boost','show' if active else 'hide') not in pins or
+                (prefix+'wing_mode','hide' if active else 'show') not in pins):
+            raise ValueError('2026 wing Boost gate disagrees with '+event['eventName'].value)
     validate_battery_binding(paths,ctx)
     validate_rpm_tip(archive,ctx)
     if root.find(ctx.prefix+'_battery_charge_win').type!='eWindow':

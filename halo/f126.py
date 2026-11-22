@@ -1,6 +1,7 @@
 """2026 native state bindings on the shared Halo artwork."""
 import copy
 from . import layout as geo
+from . import energy_panel
 from .dials import F126
 
 BOOST_STATES = {
@@ -46,16 +47,36 @@ def record_for_2026(shared):
             {'kind':'group','id':'sm_available',
              'visible':{'path':'is_xm_available','ty':'bool'},'children':[ready]}]})
 
-    # Temporary, intentionally compact state checks in the unused inner left wing.
-    x,y=geo.wing_content_point(335.,geo.top(335.))
+    by_id = {e['id']: e for e in record['elements']}
+    metric = geo.circle_speed(True)
+    for name in ('speed','stock_speed'):
+        by_id[name]['at'] = geo.hud_point(metric.x,metric.y)
+    for name, spec, _ in geo.circle_readouts(True):
+        by_id[name]['at'] = geo.hud_point(spec.x,spec.y)
+    panel = by_id['wing_energy']['children']
+    panel[:] = [item for item in panel if item['kind'] != 'text']
+    panel.extend(energy_panel.readouts(True,'view_model_data.hud_halo_v2_'))
+    mode = next(item for item in panel if item['id']=='wing_mode')
+    mode['value'] = {'view_model':'view_model_data.hud_halo_v2_mode26'}
+    record['editor']['preview']['view_model_data.hud_halo_v2_mode26'] = 'HOTLAP'
+    panel.append(energy_panel.text_record('wing_boost',energy_panel.text_anchor('mode'),
+                 energy_panel.ROWS['mode'][3],literal='BOOST'))
+    def band(row, state, name):
+        return {'kind':'sprite','id':name,'sprite':f'band_{row}_{state}','layer':26}
+
     for active in (False,True):
         item=text('overtake_'+('on' if active else 'off'),
-                  'OVERTAKE ON' if active else 'OVERTAKE OFF',size=13.)
-        item.update(at=geo.hud_point(x,y+50.),rot=-16.,
+                  'OVERTAKE',size=geo.OVERTAKE_STATUS.size)
+        item.update(at=geo.hud_point(geo.OVERTAKE_STATUS.x,geo.OVERTAKE_STATUS.y),box=95*geo.HUD_SCALE,
                     visible={'game':'om_active','not':not active})
-        record['elements'].append(item)
-    for state,caption in BOOST_STATES.items():
-        item=text('boost_text_'+state.lower(),caption,size=13.)
+        backing = band('overtake','active' if active else 'dim','band_'+item['id'])
+        backing['visible'] = dict(item['visible'])
+        record['elements'].extend((backing,item))
+    for state in BOOST_STATES:
+        item=text('boost_text_'+state.lower(),'BOOST',size=geo.BOOST_STATUS.size)
+        item['at'] = geo.hud_point(geo.BOOST_STATUS.x,geo.BOOST_STATUS.y)
+        item['box'] = 95*geo.HUD_SCALE
         record['elements'].append({'kind':'group','id':'boost_'+state.lower(),
-            'at':geo.hud_point(x,y+76.),'rot':-16.,'children':[item]})
+            'children':[band('boost',{'eActive':'active','eAvailable':'ready'}.get(state,'dim'),
+                             'band_boost_'+state.lower()),item]})
     return record

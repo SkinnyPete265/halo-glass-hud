@@ -36,25 +36,100 @@ int main()
     car.have |= SWOFTY_LIVE_HAVE_ERS_STORE | SWOFTY_LIVE_HAVE_ERS_POWER;
     car.ers_store = 3e6f;
     car.ers_capacity = 4e6f;
+    auto tick = [&](int ms, const char *expected) {
+        dial.frame(halo::Dial::Clock::time_point{} + std::chrono::milliseconds(ms));
+        const auto label = hud.text(prefix+"flow");
+        assert(label == expected);
+        std::printf("flow %4d ms: %s\n", ms, label.empty() ? "neutral" : label.c_str());
+    };
     car.ers_deploy = 20000;
-    dial.frame();
-    assert(hud.text(prefix + "energy_status") == "75%  DEPLOY");
-    car.ers_harvest_k = 40000;
-    dial.frame();
-    assert(hud.text(prefix + "energy_status") == "75%  HARVEST");
-    car.ers_deploy = 39500;
-    dial.frame();
-    assert(hud.text(prefix + "energy_status") == "75%");
+    tick(0,""); tick(81,""); tick(199,""); tick(200,"DEPLOYING");
+    assert(hud.text(prefix+"charge") == "75%" && hud.text(prefix+"flow") == "DEPLOYING");
+    assert(hud.text(prefix+"deploy_kw") == "20" && hud.text(prefix+"harvest_kw") == "0");
+    car.ers_harvest_k = 12500; car.ers_harvest_h = 9000;
+    tick(216,"DEPLOYING");
+    car.ers_deploy = 25000;
+    tick(280,"DEPLOYING");
+    car.ers_deploy = 20000;
+    tick(300,"DEPLOYING"); tick(499,"DEPLOYING"); tick(505,"HARVESTING");
+    assert(hud.text(prefix+"flow") == "HARVESTING" && hud.text(prefix+"harvest_kw") == "22");
+    car.ers_deploy = 22500; // exactly +1 kW
+    car.ers_store = 0;
+    tick(521,"HARVESTING"); tick(721,"");
+    assert(hud.text(prefix+"flow").empty() && hud.text(prefix+"charge") == "0%");
+    car.ers_deploy = 22501; // display still rounds to 23
+    car.ers_store = car.ers_capacity;
+    tick(730,""); tick(930,"DEPLOYING");
+    assert(hud.text(prefix+"flow") == "DEPLOYING" && hud.text(prefix+"charge") == "100%");
     car.ers_deploy = std::numeric_limits<float>::quiet_NaN();
-    dial.frame();
-    assert(hud.text(prefix + "energy_status") == "75%");
-    car.have &= ~SWOFTY_LIVE_HAVE_ERS_STORE;
-    car.ers_deploy = 0;
-    dial.frame();
-    assert(hud.text(prefix + "energy_status") == "HARVEST");
+    car.ers_capacity = 0;
+    tick(940,"");
+    assert(hud.text(prefix+"flow").empty() && hud.text(prefix+"charge") == "-");
+    assert(hud.text(prefix+"deploy_kw") == "-" && hud.text(prefix+"harvest_kw") == "22");
+    car.ers_deploy = 50000;
+    tick(945,""); tick(1145,"DEPLOYING");
+    ++live.session().subject_generation;
+    tick(1150,""); tick(1350,"DEPLOYING");
+    ++live.session().generation;
+    tick(1360,""); tick(1560,"DEPLOYING");
     car.have &= ~SWOFTY_LIVE_HAVE_ERS_POWER;
+    tick(1565,"");
+    car.have |= SWOFTY_LIVE_HAVE_ERS_MODE | SWOFTY_LIVE_HAVE_SPEED;
+    car.speed = 69.4444f;
+    const char *modes[] = {"NONE", "MEDIUM", "OVERTAKE", "HOTLAP", "-"};
+    for (int i=0; i<5; ++i) {
+        car.ers_mode = i;
+        dial.frame();
+        assert(hud.text(prefix+"mode") == modes[i]);
+        assert(hud.text(prefix+"mode26") == (i == 2 ? "-" : modes[i]));
+    }
+    assert(hud.text(prefix+"kph") == "250" && hud.text(prefix+"mph") == "155");
+    assert(hud.text(prefix+"harvest_kw") == "-");
+    car.speed = 0;
+    car.have &= ~SWOFTY_LIVE_HAVE_ERS_MODE;
     dial.frame();
-    assert(hud.text(prefix + "energy_status").empty());
+    assert(hud.text(prefix+"kph") == "0" && hud.text(prefix+"mode") == "-");
+    assert(hud.number(prefix+"speed_valid") && hud.text(prefix+"mph") == "0");
+    car.speed = std::numeric_limits<float>::infinity();
+    dial.frame();
+    assert(hud.text(prefix+"mph") == "-");
+
+    assert(!hud.number(prefix+"speed_valid"));
+    car.have &= ~SWOFTY_LIVE_HAVE_SPEED;
+    car.speed = 20;
+    dial.frame();
+    assert(!hud.number(prefix+"speed_valid"));
+    car.have |= SWOFTY_LIVE_HAVE_SPEED;
+    dial.frame();
+    assert(hud.number(prefix+"speed_valid") && hud.text(prefix+"kph") == "72"
+           && hud.text(prefix+"mph") == "45");
+
+    const auto pedals = [&](bool stepped, int brake, int throttle) {
+        assert(hud.number(prefix+"pedals_stepped") == stepped);
+        for (int i=1; i<=10; ++i) {
+            std::string suffix = (i<10 ? "0" : "") + std::to_string(i);
+            assert(hud.number(prefix+"brake"+suffix) == (i<=brake));
+            assert(hud.number(prefix+"throttle"+suffix) == (i<=throttle));
+        }
+    };
+    car.have |= SWOFTY_LIVE_HAVE_PEDALS;
+    car.brake = .45f; car.throttle = .74f;
+    dial.frame(); pedals(false,0,0);
+    dial.use_stepped_pedals(true);
+    dial.frame(); pedals(true,5,7);
+    hud.rebuild(); pedals(true,5,7);
+    car.brake = 0; car.throttle = 1;
+    dial.frame(); pedals(true,0,10);
+    car.brake = std::numeric_limits<float>::quiet_NaN();
+    dial.frame(); pedals(false,0,0);
+    car.brake = 1; car.throttle = 0;
+    dial.frame(); pedals(true,10,0);
+    car.have &= ~SWOFTY_LIVE_HAVE_PEDALS;
+    dial.frame(); pedals(false,0,0);
+    car.have |= SWOFTY_LIVE_HAVE_PEDALS;
+    dial.frame(); pedals(true,10,0);
+    dial.use_stepped_pedals(false);
+    dial.frame(); pedals(false,0,0);
 
     for (int gear = 1; gear <= 8; ++gear) {
         car.gear = gear;

@@ -14,17 +14,21 @@ def battery_layers():
     top,bottom = cy-geo.BATTERY_HEIGHT/2,cy+geo.BATTERY_HEIGHT/2
     box = (round(left*S),round(top*S),round(right*S),round(bottom*S))
     ImageDraw.Draw(images["housing"]).rounded_rectangle(
-        box,radius=geo.BATTERY_CORNER_RADIUS*S,fill=(5,27,39,195))
+        box,radius=geo.BATTERY_CORNER_RADIUS*S,fill=(36,55,70,245))
     # Filter the frame and terminal independently so their narrow separator
     # remains visible after the existing 3x-to-sprite composition.
     frame_source = Image.new('L', images["frame"].size)
     ImageDraw.Draw(frame_source).rounded_rectangle(
-        box, radius=geo.BATTERY_CORNER_RADIUS*S, outline=225, width=S
+        box, radius=geo.BATTERY_CORNER_RADIUS*S, outline=255, width=2*S
     )
     frame_mask = mat._box_filter_alpha_3x3(frame_source)
+    # Keep the crisp core above the charge artwork. A soft skirt lifts the
+    # outer silhouette off the dial without opening a gap around the fill.
+    bloom = frame_source.filter(ImageFilter.GaussianBlur(1.6*S)).point(lambda a: round(.7*a))
+    frame_mask = ImageChops.lighter(frame_mask,bloom)
     terminal_source = Image.new('L', images["frame"].size)
     ImageDraw.Draw(terminal_source).rounded_rectangle(
-        ((right+1)*S,(cy-3)*S,(right+4)*S,(cy+3)*S),
+        (box[2]+S,(cy-3)*S,(right+4)*S,(cy+3)*S),
         radius=2*S,fill=180,
     )
     terminal_mask = mat._box_filter_alpha_3x3(terminal_source)
@@ -55,7 +59,7 @@ def battery_layers():
     bolt = [(round(x*S),round(y*S)) for x,y in geo.battery_bolt_points()]
     draw = ImageDraw.Draw(images['bolt'])
     draw.line(bolt+[bolt[0]],fill=(3,16,24,205),width=max(1,round(.6*S)),joint='curve')
-    draw.polygon(bolt,fill=mat.WHITE+(255,))
+    draw.polygon(bolt,fill=(6,207,220,255))
     return images
 
 def fill_edge_mask(window_width, feather, width=512, height=8):
@@ -184,3 +188,41 @@ def pedal_mask(side, size=512):
     result = Image.new('RGBA', (size, size), (255, 255, 255, 0))
     result.putalpha(alpha)
     return result
+
+
+def pedal_slat(side, index):
+    """One complete lit slat using the idle geometry and active artwork filter."""
+    points = geo.slat_points(side,index)
+    left = math.floor(min(x for x,y in points))-2
+    top = math.floor(min(y for x,y in points))-2
+    right = math.ceil(max(x for x,y in points))+2
+    bottom = math.ceil(max(y for x,y in points))+2
+    size = ((right-left)*S,(bottom-top)*S)
+    mask = Image.new('L',size)
+    ImageDraw.Draw(mask).polygon([(round((x-left)*S),round((y-top)*S)) for x,y in points],fill=255)
+    layer = Image.new('RGBA',size,(249,72,70) if side<0 else (83,234,151))
+    layer.putalpha(mask.filter(ImageFilter.GaussianBlur(.34*S)))
+    result = art.canvas()
+    result.alpha_composite(layer,(left*S,top*S))
+    return result
+
+
+def status_band(row, state):
+    """Traced proportions of the 2026 reference's segmented Boost and solid Overtake bands."""
+    image = art.canvas()
+    draw = ImageDraw.Draw(image)
+    colour = {'dim': (75, 85, 100, 210), 'ready': (97, 125, 143, 230),
+              'active': (35, 144, 79, 245)}[state]
+    y = (geo.BOOST_STATUS if row == 'boost' else geo.OVERTAKE_STATUS).y
+    def panel(left, right):
+        points = [(left-1,-7), (right+1,-7), (right,7), (left,7)]
+        draw.polygon([((geo.CX+x)*S,(y+dy)*S) for x,dy in points],
+                     fill=colour, outline=tuple(min(255,c+34) for c in colour[:3])+(230,), width=S)
+    if row == 'boost':
+        panel(-33,33)
+        for side in (-1,1):
+            for x in (36,44,52):
+                panel(*sorted((side*x,side*(x+4))))
+    else:
+        panel(-59,59)
+    return image

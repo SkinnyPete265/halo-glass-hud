@@ -5,9 +5,10 @@ import struct
 import uuid
 from pathlib import Path
 from formats import erpw, idf, pkg, uinode as N, uiops as U
-from halo import layout, instruments, material, sectors, drs_motion, rpm_mask
+from halo import layout, energy_panel, instruments, material, sectors, drs_motion, rpm_mask
 from halo.tuning import rgb
 from halo.dials import F125, F126
+from halo.f126 import BOOST_STATES
 
 ROOT = Path(__file__).resolve().parents[1]
 DIAL = 'eaid://ui_package/art/osd/components/dial/'
@@ -84,13 +85,13 @@ def component(archive, reference, source, destination, material_source):
     return resource, scene
 
 
-def attach_native(scene, slot, destination, ctx=F125):
+def attach_native(scene, slot, destination, ctx=F125, parent=None):
     element = detach_scene(scene.scenes[0].root, slot)
     idf.retarget(element, destination)
     scale = layout.HUD_SCALE * .018 / .0065
     element.set('position', pkg.Val('vec3', [.117 * scale, -1.1875 * scale, 0., 0.]))
     element.set('scale', pkg.Val('vec3', [scale, scale, 1., 0.]))
-    scene.scenes[0].root.find(ctx.prefix).obj['children'].items.append(element)
+    scene.scenes[0].root.find(parent or ctx.prefix).obj['children'].items.append(element)
 
 
 def pedals(archive, reference, scene, ctx=F125):
@@ -136,7 +137,7 @@ def pedals(archive, reference, scene, ctx=F125):
             replace_prefix(animations, source, destination)
     refresh_scene(native)
     archive.set_frag(resource, 0, native.to_bytes())
-    attach_native(scene, 'engine_meters', destination, ctx=ctx)
+    attach_native(scene, 'engine_meters', destination, ctx=ctx, parent=ctx.prefix+'_pedal_gradual')
 
 
 def soft_mask(archive, reference, scene, name, texture):
@@ -172,22 +173,22 @@ def battery_binding(controls, ctx=F125):
 def battery_colours(archive, reference, scene, controls, dial_child, ctx=F125):
     source = DIAL + 'dial_complete.idf/speedo_number?context=animation'
     prototype = scene.scenes[0].root.find('speedo_number').obj['anims'].items[0]
-    keys = instruments.BATTERY_COLOUR_KEYS
-    times = [time for time, colour in keys]
-    colours = [tuple(channel / 255. for channel in colour) + (1.,)
-               for time, colour in keys]
-    raw = bytearray(struct.pack('<' + 'f' * len(times), *times))
-    key_start = (len(raw) + 15) & ~15
-    raw.extend(bytes(key_start - len(raw)))
-    for index, (time, colour) in enumerate(zip(times, colours)):
-        before, after = max(0, index - 1), min(len(times) - 1, index + 1)
-        left = time - (time - times[before]) / 3
-        right = time + (times[after] - time) / 3
-        for component_index, value in enumerate(colour):
-            incoming = value - (value - colours[before][component_index]) / 3
-            outgoing = value + (colours[after][component_index] - value) / 3
-            raw.extend(struct.pack('<5f', value, incoming, left, outgoing, right))
     for leaf in ((ctx.prefix + '_battery_frame'), (ctx.prefix + '_battery_charge_fill')):
+        keys = instruments.battery_keys('frame' if leaf.endswith('_frame') else 'fill')
+        times = [time for time, colour in keys]
+        colours = [tuple(channel / 255. for channel in colour) + (1.,)
+                   for time, colour in keys]
+        raw = bytearray(struct.pack('<' + 'f' * len(times), *times))
+        key_start = (len(raw) + 15) & ~15
+        raw.extend(bytes(key_start - len(raw)))
+        for index, (time, colour) in enumerate(zip(times, colours)):
+            before, after = max(0, index - 1), min(len(times) - 1, index + 1)
+            left = time - (time - times[before]) / 3
+            right = time + (times[after] - time) / 3
+            for component_index, value in enumerate(colour):
+                incoming = value - (value - colours[before][component_index]) / 3
+                outgoing = value + (colours[after][component_index] - value) / 3
+                raw.extend(struct.pack('<5f', value, incoming, left, outgoing, right))
         clip_path = ctx.main + '/' + leaf + '_colour?context=animation'
         clip = clone_resource(archive, reference, source, clip_path)
         metadata = pkg.Pkg(archive.frag_data(clip, 0))
@@ -514,15 +515,22 @@ def centre_text_readouts(scene, reference, controls=None, ctx=F125):
     records = {}
     if controls is not None and layout.STYLE['text_colour'] != '#ffffff':
         colour = '#' + layout.STYLE['text_colour'][1:] + 'ff'
-        for name in ('speed', 'rpm_value', 'rpm_unit', 'brake_label',
+        for name in ('speed', 'stock_speed', 'rpm_value', 'rpm_unit', 'brake_label',
                      'throttle_label', 'special_gear'):
             N.child(controls, 't_' + name).items[N.PROPS].set(
                 'colourOverride', U.prop('rgba', colour))
     readouts = [
-            ('speed', layout.SPEED), ('rpm_value', number), ('rpm_unit', unit),
+            ('speed', layout.circle_speed(ctx != F125)), ('rpm_value', number), ('rpm_unit', unit),
             ('brake_label', layout.pedal_label(-1)),
             ('throttle_label', layout.pedal_label(1)), ('special_gear', layout.SPECIAL_GEAR),
             ('drs_open_label', layout.Text(*layout.DRS_CENTRE,layout.DRS_STATUS_TEXT_SIZE))]
+    readouts.append(('stock_speed',layout.circle_speed(ctx != F125)))
+    readouts.extend((name,spec) for name,spec,_ in layout.circle_readouts(ctx != F125))
+    readouts.extend(('wing_'+name,energy_panel.text_anchor(name,ctx != F125)) for name in energy_panel.rows(ctx != F125))
+    if ctx != F125:
+        readouts.append(('wing_boost',energy_panel.text_anchor('mode')))
+        readouts.extend(('boost_text_'+state.lower(),layout.BOOST_STATUS) for state in BOOST_STATES)
+        readouts.extend(('overtake_'+state,layout.OVERTAKE_STATUS) for state in ('on','off'))
     readouts.extend((glyph.name, glyph.anchor) for glyph in sectors.glyphs())
     for name, spec in readouts:
         holder = scene.scenes[0].root.find((ctx.prefix + '_') + name + '_n').obj
@@ -837,6 +845,17 @@ def apply(scene_archive, template_archive, ctx=F125):
     tip=rpm_tip_motion(scene_archive,reference,scene,ctx)
     gears = gear_transitions(scene, controls, ctx=ctx)
     pedals(scene_archive, reference, scene, ctx=ctx)
+    front = 'eaid://ui_package/art/osd/textures/hud/'+ctx.prefix+'_wing_energy_front.tif'
+    for name in ('wing_energy_fill','wing_energy_glow'):
+        soft_mask(scene_archive, reference, scene, ctx.prefix+'_'+name+'_win', front)
+        for part in ('win','ctr'):
+            N.child(controls,'x_'+name+'_'+part).items[N.PROPS].set('fraction',U.prop('fp32',0.,'ers_stored'))
+    for name in energy_panel.rows(ctx != F125):
+        if name == 'charge':
+            continue
+        colour = energy_panel.GREEN if name.startswith('harvest') else energy_panel.ICE
+        N.child(controls,'t_wing_'+name).items[N.PROPS].set('colourOverride',
+            U.prop('rgba','#%02x%02x%02xff' % colour))
     battery = battery_colours(scene_archive, reference, scene, controls, dial_child, ctx=ctx)
     if ctx == F125:
         status = drs(scene_archive, reference, scene, f1, dial_child, controls)

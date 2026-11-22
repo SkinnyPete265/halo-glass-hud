@@ -88,11 +88,39 @@ class InstrumentRefinementTests(unittest.TestCase):
                 self.assertEqual(value['dbentry'].value,'ers_stored')
 
     def test_battery_dimensions_and_bolt_resolution(self):
-        self.assertAlmostEqual(geo.BATTERY_WIDTH,54.*1.06*1.10)
-        self.assertAlmostEqual(geo.BATTERY_HEIGHT,22.*1.02)
-        self.assertGreater(geo.BATTERY_CORNER_RADIUS/geo.BATTERY_HEIGHT,.25)
+        self.assertAlmostEqual(geo.BATTERY_WIDTH/geo.BATTERY_HEIGHT,3.2,delta=.03)
+        self.assertEqual(geo.BATTERY_HEIGHT,23.5)
+        self.assertAlmostEqual(geo.BATTERY_CORNER_RADIUS/geo.BATTERY_HEIGHT,.16)
         with Image.open(ROOT/self.record['sprites']['battery_bolt']['png']) as image:
             self.assertGreaterEqual(image.height,geo.BATTERY_TEXTURE_RESOLUTION*9)
+
+    def test_battery_rim_draws_over_full_charge_with_an_outer_glow(self):
+        battery = next(item for item in self.record['elements'] if item['id']=='battery')
+        layers = {item['id']:item['layer'] for item in battery['children']}
+        self.assertGreater(layers['battery_frame'],layers['battery_charge'])
+        alpha = feature_assets.battery_layers()['frame'].getchannel('A')
+        cx,cy = geo.BATTERY_CENTRE
+        x = round(cx*art.S)
+        top = round((cy-geo.BATTERY_HEIGHT/2)*art.S)
+        core = alpha.getpixel((x,top+art.S))
+        glow = alpha.getpixel((x,top-art.S))
+        self.assertGreater(core,230)
+        self.assertGreater(glow,15)
+        self.assertLess(alpha.getpixel((x,top-3*art.S)),glow)
+
+    def test_full_fill_meets_the_inner_frame(self):
+        layers = feature_assets.battery_layers()
+        frame = layers['frame'].getchannel('A')
+        fill = layers['fill'].getchannel('A')
+        housing = layers['housing'].getchannel('A')
+        # Even at the rounded corners, every housing texel inside the
+        # filtered rim must belong to the charge sprite at full charge.
+        box = housing.getbbox()
+        for pixel, rim, charge in zip(housing.crop(box).getdata(),
+                                      frame.crop(box).getdata(),
+                                      fill.crop(box).getdata()):
+            if pixel and rim < 64:
+                self.assertGreater(charge, 0)
 
     def test_filtered_battery_frame_keeps_the_original_terminal_gap(self):
         cx,cy=geo.BATTERY_CENTRE
@@ -105,7 +133,7 @@ class InstrumentRefinementTests(unittest.TestCase):
             box,radius=geo.BATTERY_CORNER_RADIUS*art.S,outline=225,width=art.S)
         terminal_source=Image.new('L',frame_source.size)
         ImageDraw.Draw(terminal_source).rounded_rectangle(
-            ((right+1)*art.S,(cy-3)*art.S,(right+4)*art.S,(cy+3)*art.S),
+            (box[2]+art.S,(cy-3)*art.S,(right+4)*art.S,(cy+3)*art.S),
             radius=2*art.S,fill=180)
         centre_y=round(cy*art.S)
         frame_x=[x for x in range(round(right*art.S)-art.S*2,

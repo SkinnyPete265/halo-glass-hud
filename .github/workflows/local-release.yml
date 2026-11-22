@@ -11,7 +11,7 @@ on:
         description: What to run on the release PC
         required: true
         type: choice
-        default: package
+        default: install
         options:
           - package
           - install

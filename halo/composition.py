@@ -6,7 +6,7 @@ from .asset_cache import AssetCache
 from tools.build_inputs import artwork_source_fingerprint
 from .tuning import values
 from . import artwork as art, layout as geo
-from . import feature_assets, instruments, sectors, drs_motion, rpm_mask
+from . import energy_panel, feature_assets, instruments, sectors, drs_motion, rpm_mask
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "view_model_data.hud_halo_v2_"
@@ -43,6 +43,9 @@ def crop_sprite(name, final):
     if not bounds:
         raise ValueError('Empty sprite ' + name)
     left, top, right, bottom = bounds
+    if name.startswith('lit_'):
+        # Leave a transparent BC7 block around the filtered edge.
+        left, top, right, bottom = left-4, top-4, right+4, bottom+4
     right += (4 - (right - left) % 4) % 4
     bottom += (4 - (bottom - top) % 4) % 4
     return final, (left, top, right, bottom)
@@ -63,6 +66,10 @@ def write():
             return ('wing_extension','wing_content_follow','text_size','text_colour','text_glow','text_glow_strength','text_outline')
         if name.startswith('drs_'):
             return ('wing_extension',)
+        if name.startswith('wing_energy'):
+            return ('wing_extension','wing_content_follow','hud_size')
+        if name.startswith('battery_preview_'):
+            return ('battery_width','battery_height','battery_y','battery_blue')
         if name.startswith('battery_'):
             return ('battery_width','battery_height','battery_y')
         if name in ('rpm_fill','rpm_fill_mask'):
@@ -103,9 +110,24 @@ def write():
 
 
     elements = [{"kind": "sprite", "id": "base", "sprite": "base", "layer": 20}]
-    preview = {"game.speed_str": "250", "game.revs": .89, "game.ers_stored": .75,
+    preview = {PREFIX + "kph": "250", PREFIX + "mph": "155", "game.revs": .89, "game.ers_stored": .75,
                "game.has_ers": True, PREFIX + "rpm": "11585",
                PREFIX + "drs_reveal": 0.0, PREFIX + "drs_visible": False}
+    pedal_gate = PREFIX+'pedals_stepped'
+    preview[pedal_gate] = False
+    elements.append({'kind':'group','id':'pedal_gradual',
+                     'visible':{'view_model':pedal_gate,'not':True,'default':False},'children':[]})
+    banks = []
+    for side, name in ((-1,'brake'),(1,'throttle')):
+        slats = []
+        for index in range(10):
+            key = f'lit_{name}_{index+1:02d}'
+            sprite(key,lambda side=side,index=index:feature_assets.pedal_slat(side,index))
+            slats.append(key)
+        banks.append({'kind':'slats','id':name+'_steps','sprites':slats,
+                      'show':PREFIX+name+'{nn}','layer':25})
+    elements.append({'kind':'group','id':'pedal_stepped','visible':{'view_model':pedal_gate},
+                     'children':banks})
     for gear in range(1, 9):
         for selected in (False, True):
             name = f"gear_{gear}_{'active' if selected else 'idle'}"
@@ -125,7 +147,8 @@ def write():
     raw_sprite('rpm_fill_mask',rpm_mask.texture,geo.hud_bounds([0,0,*rpm_mask.TEXTURE_SIZE]))
     number_at,unit_at=instruments.rpm_labels(11585)
     for name, spec, value, box in (
-        ("speed", geo.SPEED, {"game": "speed_str"}, 52),
+        ("speed", geo.circle_speed(False), {"view_model": PREFIX + "kph"}, 52),
+        ("stock_speed", geo.circle_speed(False), {"game": "speed_str"}, 52),
         ("rpm_value", number_at, {"view_model": PREFIX + "rpm"}, 22),
         ("rpm_unit", unit_at, {"literal": "RPM"}, 12),
         ("brake_label", geo.pedal_label(-1), {"literal": "BRAKE"}, 20),
@@ -142,8 +165,11 @@ def write():
             element["literal"]=value["literal"]
         else:
             element["value"]=value
+        if name in ("speed", "stock_speed"):
+            element["visible"] = {"view_model": PREFIX+"speed_valid", "not": name=="stock_speed"}
         elements.append(element)
 
+    preview[PREFIX+"speed_valid"] = True
     elements.extend(sectors.elements())
     for glyph in sectors.glyphs():
         if glyph.binding:
@@ -176,24 +202,38 @@ def write():
         else:
             sprite(name,lambda:feature_assets.battery_layers()[part],geo.BATTERY_TEXTURE_RESOLUTION)
             battery.append({"kind":"sprite","id":name,"sprite":name,
-                            "layer":27 if part=="bolt" else 24 if part=="housing" else 25})
-    bx, by = geo.BATTERY_CENTRE
-    battery.append({
-        "kind": "text", "id": "energy_status", "style": "OSD_24_bold",
-        "align": "centre", "box": 96 * size_ratio, "cap_height": 8 * size_ratio,
-        "at": geo.hud_point(bx, by - geo.BATTERY_HEIGHT / 2 - 5),
-        "value": {"view_model": PREFIX + "energy_status"}, "layer": 27,
-    })
-    preview[PREFIX + "energy_status"] = "75%  DEPLOY"
+                            "layer":28 if part=="bolt" else 24 if part=="housing" else 27})
+    for name, spec, caption in geo.circle_readouts(False):
+        readout = energy_panel.text_record(name,spec,72,literal=caption,leaf=name,prefix=PREFIX)
+        readout["visible"] = {"view_model": PREFIX+"speed_valid"}
+        elements.append(readout)
+
+    sprite('wing_energy_track',energy_panel.track,art.S)
+    panel = [{'kind':'sprite','id':'wing_energy_track','sprite':'wing_energy_track','layer':24}]
+    left, right = energy_panel.rail_limits()
+    window = right - left + 20
+    for name, producer, layer in (('wing_energy_glow',energy_panel.rail_glow,25),
+                                  ('wing_energy_fill',energy_panel.fill,26)):
+        sprite(name,producer,art.S,resample=Image.Resampling.BOX)
+        rail = gauge(name,name,{'game':'ers_stored'})
+        rail['layer'] = layer
+        rail['window'][0] = window * geo.HUD_SCALE
+        for end, x in zip(rail['path'],(left,right)):
+            end[0] = geo.hud_point(x-window/2,0)[0]
+        panel.append(rail)
+    raw_sprite('wing_energy_front',lambda:energy_panel.front_mask(window),geo.hud_bounds([0,0,1024,8]))
+    panel.extend(energy_panel.readouts(False,PREFIX))
+    elements.append({'kind':'group','id':'wing_energy','visible':{'game':'has_ers'},'children':panel})
+    preview.update({PREFIX+key:value for key,value in {
+        'charge':'75%', 'mode':'HOTLAP', 'flow':'DEPLOYING',
+        'deploy_kw':'116','harvest_kw':'22'}.items()})
     # These two standalone assets are redirected only into the editor preview
     # during runtime preparation. Bake its 75% battery tint without changing
     # either game's live material or native colour animation.
-    preview_tint = Image.new(
-        'RGBA', (1, 1), instruments.battery_colour(.75) + (255,))
     for part in ('frame', 'fill'):
         name = 'battery_preview_' + part
         layer = feature_assets.battery_layers()[part]
-        tint = preview_tint.resize(layer.size)
+        tint = Image.new('RGBA', layer.size, instruments.battery_colour(.75,part) + (255,))
         producer = lambda layer=layer, tint=tint: ImageChops.multiply(layer, tint)
         if part == 'fill':
             sprite(name, producer, geo.BATTERY_TEXTURE_RESOLUTION,
@@ -243,6 +283,9 @@ def write():
                                      geo.WING_EFFECT_END+11, geo.HUD_BOX_BOTTOM]),
               "sprites": sprites, "elements": elements,
               "editor": {"preview": preview}}
+    for row, states in (('boost', ('dim','ready','active')), ('overtake', ('dim','active'))):
+        for state in states:
+            sprite(f'band_{row}_{state}',lambda row=row,state=state:feature_assets.status_band(row,state))
     from .f126 import record_for_2026
     records = {"glass_dial": record, "glass_dial_26": record_for_2026(record)}
     (ROOT / "registry" / "hud.json").write_text(
