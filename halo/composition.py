@@ -202,7 +202,7 @@ def write():
         else:
             sprite(name,lambda:feature_assets.battery_layers()[part],geo.BATTERY_TEXTURE_RESOLUTION)
             battery.append({"kind":"sprite","id":name,"sprite":name,
-                            "layer":27 if part=="bolt" else 24 if part=="housing" else 25})
+                            "layer":28 if part=="bolt" else 24 if part=="housing" else 27})
     for name, spec, caption in geo.circle_readouts(False):
         readout = energy_panel.text_record(name,spec,72,literal=caption,leaf=name,prefix=PREFIX)
         readout["visible"] = {"view_model": PREFIX+"speed_valid"}

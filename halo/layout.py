@@ -91,7 +91,7 @@ DRS_CLOSE_CURVE = 'generic_fade_off_fast'
 HUD_BOX_BOTTOM = max(422.0, wing_backing_bounds(WING_EFFECT_END)[1] + 34.0)
 BATTERY_CENTRE = (CX, STYLE['battery_y'])
 BATTERY_WIDTH, BATTERY_HEIGHT = STYLE['battery_width'], STYLE['battery_height']
-BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .28
+BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .16
 BATTERY_TEXTURE_RESOLUTION = 3
 BATTERY_FILL_FEATHER = 0.0
 # Let the fill meet the one-pixel rim with one supersampled texel of overlap.
@@ -124,9 +124,10 @@ def battery_fill_edge(charge):
 
 def battery_bolt_points():
     cx, cy = BATTERY_CENTRE
-    return [(cx + .7, cy - 4.7), (cx - 3.6, cy + .3),
-            (cx - .4, cy + .3), (cx - 1.0, cy + 4.7),
-            (cx + 3.9, cy - .9), (cx + .9, cy - .9)]
+    # A narrow, forward-leaning flash with an offset kink, traced from the reference.
+    points = [(2.9,-5.8), (-3.3,.4), (-.4,.4), (-2.4,5.8), (3.2,-.8), (.5,-.8)]
+    scale = BATTERY_HEIGHT / 23.5
+    return [(cx+x*scale,cy+y*scale) for x,y in points]
 
 FONT_PATH = "assets/fonts/Saira/Saira.ttf"
 
@@ -305,7 +306,7 @@ def refresh_style(style=None):
     BATTERY_CENTRE = (CX, STYLE['battery_y'])
     BATTERY_WIDTH = STYLE['battery_width']
     BATTERY_HEIGHT = STYLE['battery_height']
-    BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .28
+    BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .16
     DRS_PROMPT_OUTLINE_RADIUS = .4 * STYLE['text_outline']
     DRS_PROMPT_OUTLINE_ALPHA = round(85 * STYLE['text_glow_strength'] / 100.)
     DRS_LABEL_GLOW_RADIUS = .7 * STYLE['text_glow']

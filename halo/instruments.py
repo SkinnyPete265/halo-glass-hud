@@ -34,7 +34,7 @@ def refresh_style():
 def battery_keys(part):
     if part == 'frame':
         # The reference rim is a lighter tint of the normal-charge blue.
-        rim = tuple(round(c + (255-c)*.30) for c in BATTERY_BLUE)
+        rim = tuple(round(c + (255-c)*.52) for c in BATTERY_BLUE)
         return tuple((t, rim if t >= .35 else c) for t,c in BATTERY_COLOUR_KEYS)
     return BATTERY_COLOUR_KEYS
 

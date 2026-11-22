@@ -19,12 +19,16 @@ def battery_layers():
     # remains visible after the existing 3x-to-sprite composition.
     frame_source = Image.new('L', images["frame"].size)
     ImageDraw.Draw(frame_source).rounded_rectangle(
-        box, radius=geo.BATTERY_CORNER_RADIUS*S, outline=225, width=S
+        box, radius=geo.BATTERY_CORNER_RADIUS*S, outline=255, width=2*S
     )
     frame_mask = mat._box_filter_alpha_3x3(frame_source)
+    # Keep the crisp core above the charge artwork. A soft skirt lifts the
+    # outer silhouette off the dial without opening a gap around the fill.
+    bloom = frame_source.filter(ImageFilter.GaussianBlur(1.6*S)).point(lambda a: round(.7*a))
+    frame_mask = ImageChops.lighter(frame_mask,bloom)
     terminal_source = Image.new('L', images["frame"].size)
     ImageDraw.Draw(terminal_source).rounded_rectangle(
-        ((right+1)*S,(cy-3)*S,(right+4)*S,(cy+3)*S),
+        (box[2]+S,(cy-3)*S,(right+4)*S,(cy+3)*S),
         radius=2*S,fill=180,
     )
     terminal_mask = mat._box_filter_alpha_3x3(terminal_source)
