@@ -2,6 +2,28 @@
 
 Development and beta builds use the same versioned notes intended for future releases.
 
+## 0.16.0
+
+### New/Added
+
+- Added Live v6 sector timing for supported builds, with the verified native split reader as fallback.
+- Added a prototype battery charge percentage and net deploy/harvest readout.
+
+### Fixes
+
+- Restored the full glow above the speedometer ring.
+- Smoothed the decorative wing edges through the tips and matched them more closely to the ring's blue.
+- Corrected the 2026 Boost element IDs for HUD schema validation.
+
+### Miscellaneous
+
+- Added hosted source checks and GitHub-triggered local packaging and installation.
+- Added release evidence and exact-cache checks. In-game testing starts with a manual launch.
+
+### Test status
+
+- The owner approved the wing-edge changes in `0.15.0-dev2`. A dedicated UDP-off Time Trial remains pending.
+
 ## 0.15.0-dev2
 
 ### Fixes
