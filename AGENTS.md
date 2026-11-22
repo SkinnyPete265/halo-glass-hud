@@ -56,9 +56,10 @@ paths come from the ignored `project.local.json`.
 ## Release
 
 - Keep the manifest version, package name and CHANGELOG.md entry aligned.
-  Use `-devN` for approved development builds. Owner approval after in-game
-  testing authorizes packaging and installing the next plain minor release. Follow the
-  numbering examples and release-note format in docs/REPOSITORY.md.
+  Bump the minor version when starting a new development cycle and use `-devN`
+  for its approved test builds. Owner approval after in-game testing authorizes
+  packaging and installing the same version with the `-devN` suffix removed.
+  Follow the numbering examples and release-note format in docs/REPOSITORY.md.
 
 - For a requested build and install, use
   `python -B tools/project.py release --install`. Add `--native` for C++

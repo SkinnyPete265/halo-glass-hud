@@ -85,13 +85,14 @@ PC. To pause polling, disable **Halo HUD local release worker** in Task Schedule
 ## Versions and changelogs
 
 Use the manifest's SemVer version for the addon, package, Git tag, and changelog
-heading. Approval to test authorizes a development build on the current line,
-such as `0.15.0-dev1`. Increment the sequence for revised test candidates
-(`0.15.0-dev2`), and reuse it for retries of the same commit.
+heading. Start a new development cycle at the next minor version with `-dev1`.
+Increment the suffix for revised test candidates and reuse it for retries of
+the same commit.
 
-Owner approval after in-game testing authorizes packaging and installing the tested changes as
-the next plain minor version. The sequence is `0.15.0-dev1` → `0.16.0` →
-`0.16.0-dev1` → `0.17.0`. Record the tested commit, then update the manifest
+Owner approval after in-game testing authorizes packaging and installing the
+tested changes as the stable release for that cycle. Drop the `-devN` suffix
+and keep the base version. For example, `0.17.0-dev1` → `0.17.0-dev2` →
+`0.17.0` → `0.18.0-dev1`. Record the tested commit, then update the manifest
 and changelog on a release commit containing just release metadata. Dispatch
 `install` for that commit. Public uploading requires a separate request.
 
