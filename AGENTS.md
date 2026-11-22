@@ -76,6 +76,8 @@ paths come from the ignored `project.local.json`.
   release checkpoint, unless the owner explicitly requests package-only.
   A design or code review approval accepts the changes only. Report the
   result after exact-cache verification. The owner starts F1 25 manually.
+- For the owner's local installs, always target the `Halo-HUD-Dev` SWOFTY
+  profile through `project.local.json`, regardless of which profile is active.
 - The release helper handles composition, validation, package reuse, rollback,
   the profile snapshot and exact-cache verification. If F1 25 is open, finish
   preparation, then resume with the same command after normal game closure.
