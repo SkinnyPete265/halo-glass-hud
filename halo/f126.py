@@ -49,10 +49,14 @@ def record_for_2026(shared):
 
     by_id = {e['id']: e for e in record['elements']}
     metric = geo.circle_speed(True)
-    by_id['speed']['at'] = geo.hud_point(metric.x,metric.y)
+    for name in ('speed','stock_speed'):
+        by_id[name]['at'] = geo.hud_point(metric.x,metric.y)
     for name, spec, _ in geo.circle_readouts(True):
         by_id[name]['at'] = geo.hud_point(spec.x,spec.y)
     panel = by_id['wing_energy']['children']
+    mode = next(item for item in panel if item['id']=='wing_mode')
+    mode['value'] = {'view_model':'view_model_data.hud_halo_v2_mode26'}
+    record['editor']['preview']['view_model_data.hud_halo_v2_mode26'] = 'HOTLAP'
     panel.append(energy_panel.text_record('wing_boost',energy_panel.text_anchor('mode'),
                  energy_panel.ROWS['mode'][3],literal='BOOST'))
     for active in (False,True):

@@ -64,6 +64,7 @@ int main()
         car.ers_mode = i;
         dial.frame();
         assert(hud.text(prefix+"mode") == modes[i]);
+        assert(hud.text(prefix+"mode26") == (i == 2 ? "-" : modes[i]));
     }
     assert(hud.text(prefix+"kph") == "250" && hud.text(prefix+"mph") == "155");
     assert(hud.text(prefix+"harvest_kw") == "-");
@@ -71,9 +72,20 @@ int main()
     car.have &= ~SWOFTY_LIVE_HAVE_ERS_MODE;
     dial.frame();
     assert(hud.text(prefix+"kph") == "0" && hud.text(prefix+"mode") == "-");
+    assert(hud.number(prefix+"speed_valid") && hud.text(prefix+"mph") == "0");
     car.speed = std::numeric_limits<float>::infinity();
     dial.frame();
     assert(hud.text(prefix+"mph") == "-");
+
+    assert(!hud.number(prefix+"speed_valid"));
+    car.have &= ~SWOFTY_LIVE_HAVE_SPEED;
+    car.speed = 20;
+    dial.frame();
+    assert(!hud.number(prefix+"speed_valid"));
+    car.have |= SWOFTY_LIVE_HAVE_SPEED;
+    dial.frame();
+    assert(hud.number(prefix+"speed_valid") && hud.text(prefix+"kph") == "72"
+           && hud.text(prefix+"mph") == "45");
 
     const auto pedals = [&](bool stepped, int brake, int throttle) {
         assert(hud.number(prefix+"pedals_stepped") == stepped);

@@ -143,6 +143,7 @@ def write():
     number_at,unit_at=instruments.rpm_labels(11585)
     for name, spec, value, box in (
         ("speed", geo.SPEED, {"view_model": PREFIX + "kph"}, 52),
+        ("stock_speed", geo.SPEED, {"game": "speed_str"}, 52),
         ("rpm_value", number_at, {"view_model": PREFIX + "rpm"}, 22),
         ("rpm_unit", unit_at, {"literal": "RPM"}, 12),
         ("brake_label", geo.pedal_label(-1), {"literal": "BRAKE"}, 20),
@@ -159,8 +160,11 @@ def write():
             element["literal"]=value["literal"]
         else:
             element["value"]=value
+        if name in ("speed", "stock_speed"):
+            element["visible"] = {"view_model": PREFIX+"speed_valid", "not": name=="stock_speed"}
         elements.append(element)
 
+    preview[PREFIX+"speed_valid"] = True
     elements.extend(sectors.elements())
     for glyph in sectors.glyphs():
         if glyph.binding:
@@ -195,7 +199,9 @@ def write():
             battery.append({"kind":"sprite","id":name,"sprite":name,
                             "layer":27 if part=="bolt" else 24 if part=="housing" else 25})
     for name, spec, caption in geo.circle_readouts(False):
-        elements.append(energy_panel.text_record(name,spec,72,literal=caption,leaf=name,prefix=PREFIX))
+        readout = energy_panel.text_record(name,spec,72,literal=caption,leaf=name,prefix=PREFIX)
+        readout["visible"] = {"view_model": PREFIX+"speed_valid"}
+        elements.append(readout)
 
     sprite('wing_energy_track',energy_panel.track,art.S)
     panel = [{'kind':'sprite','id':'wing_energy_track','sprite':'wing_energy_track','layer':24}]

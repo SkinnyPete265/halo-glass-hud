@@ -515,7 +515,7 @@ def centre_text_readouts(scene, reference, controls=None, ctx=F125):
     records = {}
     if controls is not None and layout.STYLE['text_colour'] != '#ffffff':
         colour = '#' + layout.STYLE['text_colour'][1:] + 'ff'
-        for name in ('speed', 'rpm_value', 'rpm_unit', 'brake_label',
+        for name in ('speed', 'stock_speed', 'rpm_value', 'rpm_unit', 'brake_label',
                      'throttle_label', 'special_gear'):
             N.child(controls, 't_' + name).items[N.PROPS].set(
                 'colourOverride', U.prop('rgba', colour))
@@ -524,6 +524,7 @@ def centre_text_readouts(scene, reference, controls=None, ctx=F125):
             ('brake_label', layout.pedal_label(-1)),
             ('throttle_label', layout.pedal_label(1)), ('special_gear', layout.SPECIAL_GEAR),
             ('drs_open_label', layout.Text(*layout.DRS_CENTRE,layout.DRS_STATUS_TEXT_SIZE))]
+    readouts.append(('stock_speed',layout.circle_speed(ctx != F125)))
     readouts.extend((name,spec) for name,spec,_ in layout.circle_readouts(ctx != F125))
     readouts.extend(('wing_'+name,energy_panel.text_anchor(name)) for name in energy_panel.ROWS)
     if ctx != F125:

@@ -826,6 +826,14 @@ def validate_f126(archive, templates):
     if (boost.items[N.PROPS]['dbEntry']['value'].value!='ers_overtake_state' or
         {e['eventName'].value for e in boost.items[N.EVENTS].items}!=set(BOOST_STATES)):
         raise ValueError('Boost state no longer matches the stock enum decision')
+    if paths[prefix+'t_wing_mode'].items[N.PROPS]['text']['dbentry'].value != '#view_model_data.hud_halo_v2_mode26':
+        raise ValueError('2026 wing must use its ordinary season mode')
+    for event in boost.items[N.EVENTS].items:
+        active = event['eventName'].value == 'eActive'
+        pins = {(s['to_object_name'].value,s['to_pin_name'].value) for s in event['signals'].items}
+        if ((prefix+'wing_boost','show' if active else 'hide') not in pins or
+                (prefix+'wing_mode','hide' if active else 'show') not in pins):
+            raise ValueError('2026 wing Boost gate disagrees with '+event['eventName'].value)
     validate_battery_binding(paths,ctx)
     validate_rpm_tip(archive,ctx)
     if root.find(ctx.prefix+'_battery_charge_win').type!='eWindow':

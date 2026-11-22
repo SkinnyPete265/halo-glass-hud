@@ -31,6 +31,9 @@ public:
             std::isfinite(car->rpm) && car->rpm >= 0 && car->rpm <= 30000) {
             std::snprintf(rpm, sizeof rpm, "%ld", std::lround(car->rpm));
         }
+        const bool speed_valid = car && swofty::live::has(*car, SWOFTY_LIVE_HAVE_SPEED) &&
+            std::isfinite(car->speed) && car->speed >= 0;
+        const char *mode26 = "-";
         if (car) {
             const auto fraction = swofty::live::ers_fraction(*car);
             if (fraction && std::isfinite(car->ers_store) && std::isfinite(car->ers_capacity) &&
@@ -40,6 +43,8 @@ public:
                 car->ers_mode >= 0 && car->ers_mode <= 3) {
                 constexpr const char *modes[] = {"NONE", "MEDIUM", "OVERTAKE", "HOTLAP"};
                 mode = modes[car->ers_mode];
+                // Mode 2 has no verified ordinary 2026 label. Boost is a native dial event.
+                if (car->ers_mode != 2) mode26 = mode;
             }
             if (swofty::live::has(*car, SWOFTY_LIVE_HAVE_ERS_POWER)) {
                 const double deployed = car->ers_deploy / 1000.;
@@ -52,7 +57,7 @@ public:
                     if (net < -1.) flow = "HARVESTING";
                 }
             }
-            if (swofty::live::has(*car, SWOFTY_LIVE_HAVE_SPEED) && car->speed >= 0) {
+            if (speed_valid) {
                 format_number(kph, car->speed * 3.6);
                 format_number(mph, car->speed * 2.236936292);
             }
@@ -70,6 +75,8 @@ public:
             leaves_.set(rpm_, rpm);
             leaves_.set(charge_, charge);
             leaves_.set(mode_, mode);
+            leaves_.set(mode26_, mode26);
+            leaves_.set(speed_valid_, speed_valid);
             leaves_.set(flow_, flow);
             leaves_.set(deploy_kw_, deploy);
             leaves_.set(harvest_kw_, harvest);
@@ -101,6 +108,8 @@ private:
     swofty::hud::TextLeaf special_ = leaves_.text("special_gear", 2);
     swofty::hud::TextLeaf rpm_ = leaves_.text("rpm", 6);
     swofty::hud::TextLeaf charge_ = leaves_.text("charge", 8);
+    swofty::hud::BoolLeaf speed_valid_ = leaves_.boolean("speed_valid");
+    swofty::hud::TextLeaf mode26_ = leaves_.text("mode26", 12);
     swofty::hud::TextLeaf mode_ = leaves_.text("mode", 12);
     swofty::hud::TextLeaf flow_ = leaves_.text("flow", 12);
     swofty::hud::TextLeaf deploy_kw_ = leaves_.text("deploy_kw", 8);
