@@ -56,8 +56,10 @@ that SHA before the Windows worker accepts the request.
 gh workflow run local-release.yml --ref main -f commit=<approved-sha> -f mode=install
 ```
 
-Use `package` for an offline package or `install` to install in SWOFTY and
-verify the exact cache. Routine source checks never queue a local build.
+Use `install` for every approved test build or release checkpoint. It creates
+the local package, installs it in SWOFTY and verifies the exact cache. Choose
+`package` for an explicit package-only request. Routine source checks never
+queue a local build.
 The hosted run confirms the request is ready. The local worker reports the
 package and exact-cache results. The owner starts F1 25 when ready to test.
 
@@ -87,12 +89,11 @@ heading. Approval to test authorizes a development build on the current line,
 such as `0.15.0-dev1`. Increment the sequence for revised test candidates
 (`0.15.0-dev2`), and reuse it for retries of the same commit.
 
-Owner approval after in-game testing authorizes packaging the tested changes as
+Owner approval after in-game testing authorizes packaging and installing the tested changes as
 the next plain minor version. The sequence is `0.15.0-dev1` → `0.16.0` →
 `0.16.0-dev1` → `0.17.0`. Record the tested commit, then update the manifest
 and changelog on a release commit containing just release metadata. Dispatch
-`package` for that commit. A fresh local install or public upload can be
-requested separately.
+`install` for that commit. Public uploading requires a separate request.
 
 Each release record points to the verified, versioned deliverable
 (`local.halo-hud-v2-0.15.0-dev1.swoftyaddon`, for example). The release command

@@ -57,17 +57,17 @@ paths come from the ignored `project.local.json`.
 
 - Keep the manifest version, package name and CHANGELOG.md entry aligned.
   Use `-devN` for approved development builds. Owner approval after in-game
-  testing authorizes packaging the next plain minor release. Follow the
+  testing authorizes packaging and installing the next plain minor release. Follow the
   numbering examples and release-note format in docs/REPOSITORY.md.
 
 - For a requested build and install, use
   `python -B tools/project.py release --install`. Add `--native` for C++
   changes. Omit `--install` when the request is for offline packaging.
 - For a GitHub candidate, dispatch Local release from main with the exact
-  approved commit and requested mode. An approval during an install review
-  authorizes that install. A design or code review approval accepts the
-  changes only. Use the install mode for test builds and report the result
-  after exact-cache verification. The owner starts F1 25 manually for testing.
+  approved commit. Use `install` mode for every approved test build and
+  release checkpoint, unless the owner explicitly requests package-only.
+  A design or code review approval accepts the changes only. Report the
+  result after exact-cache verification. The owner starts F1 25 manually.
 - The release helper handles composition, validation, package reuse, rollback,
   the profile snapshot and exact-cache verification. If F1 25 is open, finish
   preparation, then resume with the same command after normal game closure.
