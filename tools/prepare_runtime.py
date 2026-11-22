@@ -257,8 +257,11 @@ def validate_editor_preview(archive, templates):
     if 'halo_v2_pv_battery_charge_win' not in preview_names:
         raise ValueError('Shared editor preview is missing its battery charge mask')
     if any('halo_v2_pv_'+name not in preview_names for name in ('wing_charge','wing_flow',
-            'wing_mode','wing_deploy_kw','wing_harvest_kw','wing_energy_fill_win','mph')):
+            'wing_mode','wing_energy_fill_win','mph')):
         raise ValueError('Shared editor preview is missing its battery energy readout')
+
+    if any("wing_deploy" in name or "wing_harvest" in name for name in preview_names):
+        raise ValueError("Power columns are exclusive to the 2026 live dial")
 
     preview_materials = {
         'frame': 'eaid://ui_package/art/osd/components/hud/halo_v2_battery_preview_frame.emb?context=default',
@@ -753,6 +756,9 @@ def validate_sector_appearance(root,paths,ctx):
 
 def validate_battery_binding(paths,ctx):
     prefix=ctx.path+'.'+ctx.prefix+'_ctl.'
+    for key in ('deploy_kw','harvest_kw','deploy_caption','harvest_caption'):
+        if (prefix+'t_wing_'+key in paths) != (ctx == F126):
+            raise ValueError('Unexpected season for wing power readout '+key)
     names=['x_battery_charge_win','x_battery_charge_ctr',
            'x_'+ctx.prefix+'_battery_frame_colour',
            'x_'+ctx.prefix+'_battery_charge_fill_colour']

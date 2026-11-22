@@ -145,8 +145,8 @@ def write():
     raw_sprite('rpm_fill_mask',rpm_mask.texture,geo.hud_bounds([0,0,*rpm_mask.TEXTURE_SIZE]))
     number_at,unit_at=instruments.rpm_labels(11585)
     for name, spec, value, box in (
-        ("speed", geo.SPEED, {"view_model": PREFIX + "kph"}, 52),
-        ("stock_speed", geo.SPEED, {"game": "speed_str"}, 52),
+        ("speed", geo.circle_speed(False), {"view_model": PREFIX + "kph"}, 52),
+        ("stock_speed", geo.circle_speed(False), {"game": "speed_str"}, 52),
         ("rpm_value", number_at, {"view_model": PREFIX + "rpm"}, 22),
         ("rpm_unit", unit_at, {"literal": "RPM"}, 12),
         ("brake_label", geo.pedal_label(-1), {"literal": "BRAKE"}, 20),
@@ -220,9 +220,7 @@ def write():
             end[0] = geo.hud_point(x-window/2,0)[0]
         panel.append(rail)
     raw_sprite('wing_energy_front',lambda:energy_panel.front_mask(window),geo.hud_bounds([0,0,1024,8]))
-    for name, (_,_,_,width) in energy_panel.ROWS.items():
-        panel.append(energy_panel.text_record('wing_'+name,energy_panel.text_anchor(name),width,
-            literal=energy_panel.CAPTIONS.get(name),leaf=name,prefix=PREFIX))
+    panel.extend(energy_panel.readouts(False,PREFIX))
     elements.append({'kind':'group','id':'wing_energy','visible':{'game':'has_ers'},'children':panel})
     preview.update({PREFIX+key:value for key,value in {
         'charge':'75%', 'mode':'HOTLAP', 'flow':'DEPLOYING',
@@ -285,6 +283,9 @@ def write():
                                      geo.WING_EFFECT_END+11, geo.HUD_BOX_BOTTOM]),
               "sprites": sprites, "elements": elements,
               "editor": {"preview": preview}}
+    for row, states in (('boost', ('dim','ready','active')), ('overtake', ('dim','active'))):
+        for state in states:
+            sprite(f'band_{row}_{state}',lambda row=row,state=state:feature_assets.status_band(row,state))
     from .f126 import record_for_2026
     records = {"glass_dial": record, "glass_dial_26": record_for_2026(record)}
     (ROOT / "registry" / "hud.json").write_text(

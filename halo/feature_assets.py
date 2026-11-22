@@ -201,3 +201,24 @@ def pedal_slat(side, index):
     result = art.canvas()
     result.alpha_composite(layer,(left*S,top*S))
     return result
+
+
+def status_band(row, state):
+    """Traced proportions of the 2026 reference's segmented Boost and solid Overtake bands."""
+    image = art.canvas()
+    draw = ImageDraw.Draw(image)
+    colour = {'dim': (75, 85, 100, 210), 'ready': (97, 125, 143, 230),
+              'active': (35, 144, 79, 245)}[state]
+    y = (geo.BOOST_STATUS if row == 'boost' else geo.OVERTAKE_STATUS).y
+    def panel(left, right):
+        points = [(left-1,-7), (right+1,-7), (right,7), (left,7)]
+        draw.polygon([((geo.CX+x)*S,(y+dy)*S) for x,dy in points],
+                     fill=colour, outline=tuple(min(255,c+34) for c in colour[:3])+(230,), width=S)
+    if row == 'boost':
+        panel(-33,33)
+        for side in (-1,1):
+            for x in (36,44,52):
+                panel(*sorted((side*x,side*(x+4))))
+    else:
+        panel(-59,59)
+    return image

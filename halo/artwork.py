@@ -70,9 +70,22 @@ def draw_base_static(rpm_width, race_variant=None):
         (150, 210, 238, 170), .8, 1.0,
         prefilter_core=True,
     )
-    image = mat.arc_stroke(image, (geo.CX, geo.CY + top_padding), 61.0,
-                           140.0, 400.0, mat.WHITE + (230,), 1.6, .8,
-                           prefilter_core=True)
+    # The reference face uses short peripheral graduations around the speed stack.
+    ticks = canvas(top_padding)
+    draw = ImageDraw.Draw(ticks)
+    for r in (61.,65.,82.):
+        box = ((geo.CX-r)*S,(geo.CY+top_padding-r)*S,
+               (geo.CX+r)*S,(geo.CY+top_padding+r)*S)
+        draw.arc(box, -71, 71, fill=(151,180,197,60), width=S)
+        draw.arc(box, 109, 251, fill=(151,180,197,60), width=S)
+    for degree in range(-145, 146, 4):
+        angle = math.radians(degree)
+        if abs(degree) < 18:
+            continue
+        points = [((geo.CX+r*math.sin(angle))*S,
+                   (geo.CY+top_padding-r*math.cos(angle))*S) for r in (72.,80.)]
+        draw.line(points, fill=(151,180,197,83), width=2*S)
+    image.alpha_composite(ticks)
     image.alpha_composite(_idle_slats_layer(), (0, round(top_padding * S)))
     rpm_points = [(x, y + top_padding) for x, y in geo.rpm_points()]
     return mat.rounded_stroke(image, rpm_points, mat.WHITE + (30,), rpm_width)

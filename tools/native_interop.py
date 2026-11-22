@@ -526,7 +526,7 @@ def centre_text_readouts(scene, reference, controls=None, ctx=F125):
             ('drs_open_label', layout.Text(*layout.DRS_CENTRE,layout.DRS_STATUS_TEXT_SIZE))]
     readouts.append(('stock_speed',layout.circle_speed(ctx != F125)))
     readouts.extend((name,spec) for name,spec,_ in layout.circle_readouts(ctx != F125))
-    readouts.extend(('wing_'+name,energy_panel.text_anchor(name)) for name in energy_panel.ROWS)
+    readouts.extend(('wing_'+name,energy_panel.text_anchor(name,ctx != F125)) for name in energy_panel.rows(ctx != F125))
     if ctx != F125:
         readouts.append(('wing_boost',energy_panel.text_anchor('mode')))
         readouts.extend(('boost_text_'+state.lower(),layout.BOOST_STATUS) for state in BOOST_STATES)
@@ -850,7 +850,9 @@ def apply(scene_archive, template_archive, ctx=F125):
         soft_mask(scene_archive, reference, scene, ctx.prefix+'_'+name+'_win', front)
         for part in ('win','ctr'):
             N.child(controls,'x_'+name+'_'+part).items[N.PROPS].set('fraction',U.prop('fp32',0.,'ers_stored'))
-    for name in ('mode','flow','deploy_kw','deploy_caption','harvest_kw','harvest_caption'):
+    for name in energy_panel.rows(ctx != F125):
+        if name == 'charge':
+            continue
         colour = energy_panel.GREEN if name.startswith('harvest') else energy_panel.ICE
         N.child(controls,'t_wing_'+name).items[N.PROPS].set('colourOverride',
             U.prop('rgba','#%02x%02x%02xff' % colour))

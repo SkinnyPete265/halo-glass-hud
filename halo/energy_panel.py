@@ -29,8 +29,20 @@ def point(u, v):
     return x + b*v, (top + bottom)/2 + d*v
 
 
-def text_anchor(name):
-    u, v, size, _ = ROWS[name]
+def rows(season26):
+    if season26:
+        return ROWS
+    return {'charge': ROWS['charge'], 'mode': ROWS['mode'], 'flow': (336., 25., 18., 134.)}
+
+
+def readouts(season26, prefix):
+    return [text_record('wing_'+name, text_anchor(name, season26), width,
+                        literal=CAPTIONS.get(name), leaf=name, prefix=prefix)
+            for name, (_, _, _, width) in rows(season26).items()]
+
+
+def text_anchor(name, season26=True):
+    u, v, size, _ = rows(season26)[name]
     x, y = point(u, v)
     x0, y0 = point(u-.5, v)
     x1, y1 = point(u+.5, v)
