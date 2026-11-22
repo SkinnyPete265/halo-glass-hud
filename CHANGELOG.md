@@ -2,6 +2,17 @@
 
 Development and beta builds use the same versioned notes intended for future releases.
 
+## 0.15.0-dev2
+
+### Fixes
+
+- Smoothed the upper and lower decorative wing edges through their tip fades.
+- Matched the decorative wing edges more closely to the speedometer ring's blue.
+
+### Miscellaneous
+
+- Release installation ends after cache verification. Launch F1 25 when ready to test.
+
 ## 0.15.0-dev1
 
 ### New/Added
