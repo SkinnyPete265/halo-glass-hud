@@ -42,11 +42,15 @@ before using its archives. A full compose also logs `swofty hud check`.
 
 ## Approved builds from GitHub
 
+Develop and commit on `dev/hud-dev`. Keep `main` as the rollback point for
+the last successful release checkpoint. Use a PR from `dev/hud-dev` into
+`main` when a release checkpoint is ready.
+
 Source checks run on pushes and pull requests. The separate **Local release**
-workflow runs only when the owner dispatches it from `main`. Put the reviewed
-candidate on GitHub, then dispatch its full commit SHA after approval in chat
-or from the Actions tab. The same Python and native checks run against that
-SHA before the Windows worker accepts the request.
+workflow runs only when the owner dispatches it from `main`. Push the reviewed
+candidate to `dev/hud-dev`, then dispatch its full commit SHA after approval
+in chat or from the Actions tab. The Python and native checks run against
+that SHA before the Windows worker accepts the request.
 
 ```powershell
 gh workflow run local-release.yml --ref main -f commit=<approved-sha> -f mode=install
