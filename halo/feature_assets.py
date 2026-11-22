@@ -197,7 +197,7 @@ def pedal_slat(side, index):
     mask = Image.new('L',size)
     ImageDraw.Draw(mask).polygon([(round((x-left)*S),round((y-top)*S)) for x,y in points],fill=255)
     layer = Image.new('RGBA',size,(249,72,70) if side<0 else (83,234,151))
-    layer.putalpha(mat._box_filter_alpha_3x3(mask))
+    layer.putalpha(mask.filter(ImageFilter.GaussianBlur(.34*S)))
     result = art.canvas()
     result.alpha_composite(layer,(left*S,top*S))
     return result

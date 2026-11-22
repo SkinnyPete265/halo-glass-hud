@@ -43,6 +43,9 @@ def crop_sprite(name, final):
     if not bounds:
         raise ValueError('Empty sprite ' + name)
     left, top, right, bottom = bounds
+    if name.startswith('lit_'):
+        # Leave a transparent BC7 block around the filtered edge.
+        left, top, right, bottom = left-4, top-4, right+4, bottom+4
     right += (4 - (right - left) % 4) % 4
     bottom += (4 - (bottom - top) % 4) % 4
     return final, (left, top, right, bottom)
