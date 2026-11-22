@@ -1,5 +1,7 @@
 #pragma once
 #include <atomic>
+#include <chrono>
+#include <tuple>
 #include <cmath>
 #include <cstdio>
 #include <swofty/hud_leaves.hpp>
@@ -10,7 +12,8 @@ class Dial {
 public:
     void use_stepped_pedals(bool enabled) { stepped_preference_.store(enabled); }
 
-    void frame()
+    using Clock = std::chrono::steady_clock;
+    void frame(Clock::time_point now = Clock::now())
     {
         const auto car = swofty::live::available() ? swofty::live::subject() : std::nullopt;
         int selected = -1;
@@ -18,7 +21,8 @@ public:
         char rpm[12]{};
         char charge[8] = "-", deploy[8] = "-", harvest[8] = "-";
         char kph[8] = "-", mph[8] = "-";
-        const char *mode = "-", *flow = "";
+        const char *mode = "-";
+        std::optional<int> flow;
         if (car && swofty::live::has(*car, SWOFTY_LIVE_HAVE_GEAR)) {
             if (car->gear >= 1 && car->gear <= 8)
                 selected = car->gear - 1;
@@ -53,13 +57,29 @@ public:
                 format_number(harvest, recovered);
                 if (std::isfinite(deployed) && std::isfinite(recovered)) {
                     const double net = deployed - recovered;
-                    if (net > 1.) flow = "DEPLOYING";
-                    if (net < -1.) flow = "HARVESTING";
+                    flow = (net > 1.) - (net < -1.);
                 }
             }
             if (speed_valid) {
                 format_number(kph, car->speed * 3.6);
                 format_number(mph, car->speed * 2.236936292);
+            }
+        }
+        const auto session = flow ? swofty::live::session() : std::nullopt;
+        if (!session) {
+            flow_subject_.reset();
+            pending_flow_ = visible_flow_ = 0;
+        } else {
+            const auto subject = std::make_tuple(session->generation, session->subject_generation, car->vehicle);
+            if (flow_subject_ != subject) {
+                flow_subject_ = subject;
+                pending_flow_ = visible_flow_ = 0;
+            }
+            if (*flow != pending_flow_) {
+                pending_flow_ = *flow;
+                flow_since_ = now;
+            } else if (now - flow_since_ >= std::chrono::milliseconds(200)) {
+                visible_flow_ = pending_flow_;
             }
         }
         const bool stepped = stepped_preference_.load() && car &&
@@ -77,7 +97,7 @@ public:
             leaves_.set(mode_, mode);
             leaves_.set(mode26_, mode26);
             leaves_.set(speed_valid_, speed_valid);
-            leaves_.set(flow_, flow);
+            leaves_.set(flow_, visible_flow_ > 0 ? "DEPLOYING" : visible_flow_ < 0 ? "HARVESTING" : "");
             leaves_.set(deploy_kw_, deploy);
             leaves_.set(harvest_kw_, harvest);
             leaves_.set(kph_, kph);
@@ -87,6 +107,9 @@ public:
     }
 
 private:
+    std::optional<std::tuple<uint32_t,uint32_t,uint32_t>> flow_subject_;
+    Clock::time_point flow_since_{};
+    int pending_flow_ = 0, visible_flow_ = 0;
     std::atomic<bool> stepped_preference_{false};
     static bool valid_pedal(float value) { return value >= 0 && value <= 1; }
 
