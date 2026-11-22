@@ -14,7 +14,7 @@ def battery_layers():
     top,bottom = cy-geo.BATTERY_HEIGHT/2,cy+geo.BATTERY_HEIGHT/2
     box = (round(left*S),round(top*S),round(right*S),round(bottom*S))
     ImageDraw.Draw(images["housing"]).rounded_rectangle(
-        box,radius=geo.BATTERY_CORNER_RADIUS*S,fill=(5,27,39,195))
+        box,radius=geo.BATTERY_CORNER_RADIUS*S,fill=(36,55,70,245))
     # Filter the frame and terminal independently so their narrow separator
     # remains visible after the existing 3x-to-sprite composition.
     frame_source = Image.new('L', images["frame"].size)
@@ -55,7 +55,7 @@ def battery_layers():
     bolt = [(round(x*S),round(y*S)) for x,y in geo.battery_bolt_points()]
     draw = ImageDraw.Draw(images['bolt'])
     draw.line(bolt+[bolt[0]],fill=(3,16,24,205),width=max(1,round(.6*S)),joint='curve')
-    draw.polygon(bolt,fill=mat.WHITE+(255,))
+    draw.polygon(bolt,fill=(6,207,220,255))
     return images
 
 def fill_edge_mask(window_width, feather, width=512, height=8):

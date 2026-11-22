@@ -294,7 +294,7 @@ def validate_editor_preview(archive, templates):
         decoded = Image.frombytes('RGBA', (width, height),
                                   archive.frag_data(image_resource, 1),
                                   'bcn', 7, 'BC7')
-        expected_colour = instruments.battery_colour(.75)
+        expected_colour = instruments.battery_colour(.75,part)
         visible_colours = {pixel[:3] for pixel in source.getdata() if pixel[3]}
         if visible_colours != {expected_colour}:
             raise ValueError('Editor battery ' + part + ' source sprite is not the 75% cyan tint')

@@ -173,22 +173,22 @@ def battery_binding(controls, ctx=F125):
 def battery_colours(archive, reference, scene, controls, dial_child, ctx=F125):
     source = DIAL + 'dial_complete.idf/speedo_number?context=animation'
     prototype = scene.scenes[0].root.find('speedo_number').obj['anims'].items[0]
-    keys = instruments.BATTERY_COLOUR_KEYS
-    times = [time for time, colour in keys]
-    colours = [tuple(channel / 255. for channel in colour) + (1.,)
-               for time, colour in keys]
-    raw = bytearray(struct.pack('<' + 'f' * len(times), *times))
-    key_start = (len(raw) + 15) & ~15
-    raw.extend(bytes(key_start - len(raw)))
-    for index, (time, colour) in enumerate(zip(times, colours)):
-        before, after = max(0, index - 1), min(len(times) - 1, index + 1)
-        left = time - (time - times[before]) / 3
-        right = time + (times[after] - time) / 3
-        for component_index, value in enumerate(colour):
-            incoming = value - (value - colours[before][component_index]) / 3
-            outgoing = value + (colours[after][component_index] - value) / 3
-            raw.extend(struct.pack('<5f', value, incoming, left, outgoing, right))
     for leaf in ((ctx.prefix + '_battery_frame'), (ctx.prefix + '_battery_charge_fill')):
+        keys = instruments.battery_keys('frame' if leaf.endswith('_frame') else 'fill')
+        times = [time for time, colour in keys]
+        colours = [tuple(channel / 255. for channel in colour) + (1.,)
+                   for time, colour in keys]
+        raw = bytearray(struct.pack('<' + 'f' * len(times), *times))
+        key_start = (len(raw) + 15) & ~15
+        raw.extend(bytes(key_start - len(raw)))
+        for index, (time, colour) in enumerate(zip(times, colours)):
+            before, after = max(0, index - 1), min(len(times) - 1, index + 1)
+            left = time - (time - times[before]) / 3
+            right = time + (times[after] - time) / 3
+            for component_index, value in enumerate(colour):
+                incoming = value - (value - colours[before][component_index]) / 3
+                outgoing = value + (colours[after][component_index] - value) / 3
+                raw.extend(struct.pack('<5f', value, incoming, left, outgoing, right))
         clip_path = ctx.main + '/' + leaf + '_colour?context=animation'
         clip = clone_resource(archive, reference, source, clip_path)
         metadata = pkg.Pkg(archive.frag_data(clip, 0))

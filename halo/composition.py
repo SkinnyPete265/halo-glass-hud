@@ -68,6 +68,8 @@ def write():
             return ('wing_extension',)
         if name.startswith('wing_energy'):
             return ('wing_extension','wing_content_follow','hud_size')
+        if name.startswith('battery_preview_'):
+            return ('battery_width','battery_height','battery_y','battery_blue')
         if name.startswith('battery_'):
             return ('battery_width','battery_height','battery_y')
         if name in ('rpm_fill','rpm_fill_mask'):
@@ -228,12 +230,10 @@ def write():
     # These two standalone assets are redirected only into the editor preview
     # during runtime preparation. Bake its 75% battery tint without changing
     # either game's live material or native colour animation.
-    preview_tint = Image.new(
-        'RGBA', (1, 1), instruments.battery_colour(.75) + (255,))
     for part in ('frame', 'fill'):
         name = 'battery_preview_' + part
         layer = feature_assets.battery_layers()[part]
-        tint = preview_tint.resize(layer.size)
+        tint = Image.new('RGBA', layer.size, instruments.battery_colour(.75,part) + (255,))
         producer = lambda layer=layer, tint=tint: ImageChops.multiply(layer, tint)
         if part == 'fill':
             sprite(name, producer, geo.BATTERY_TEXTURE_RESOLUTION,
