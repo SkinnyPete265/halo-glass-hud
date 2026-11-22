@@ -728,6 +728,56 @@ def pedal_accents():
 
 
 
+# Sample the authored normal profiles finely enough that the 4x4 texel
+# integral is limited by its coverage samples, not by profile quantisation.
+_EDGE_PROFILE_DENSITY = 128
+_EDGE_SHADOW_REACH = 14.
+
+
+def _wing_edge_profiles(style):
+    radius = style['tail_radius']
+    profiles = [bytearray() for _ in range(5)]
+    for i in range(math.ceil((radius + _EDGE_SHADOW_REACH) * _EDGE_PROFILE_DENSITY)):
+        d = (i + .5) / _EDGE_PROFILE_DENSITY - radius
+        def gaussian(centre, sigma):
+            return math.exp(-.5 * ((d - centre) / sigma) ** 2)
+        values = (
+            255 * gaussian(2., 3.4) if d >= 0 else 0,
+            52 * gaussian(0., 2.2) if d >= 0 else 0,
+            style['reflection_alpha'] * gaussian(0., style['reflection_sigma']) if d >= 0 else 0,
+            style['tail_alpha'] * .72 * gaussian(0., style['tail_sigma']) if abs(d) < radius else 0,
+            style['edge_glow_alpha'] * gaussian(0., style['edge_glow_sigma']) if d >= 0 else 0,
+        )
+        for profile, value in zip(profiles, values):
+            profile.append(round(value))
+    return [Image.frombytes('L', (1, len(profile)), bytes(profile)) for profile in profiles]
+
+
+def _edge_column(masks, profiles, x, edge_y, slope, direction, radius, fade, shadow):
+    # Distances are in artwork pixels along the normal. Project the support
+    # onto the vertical scanline, including the half-texel at either end.
+    normal = math.hypot(1., slope)
+    inner = edge_y - direction * radius * normal
+    outer = edge_y + direction * _EDGE_SHADOW_REACH * normal
+    first = max(0, math.floor(min(inner, outer) * S - abs(slope) / 2))
+    end = min(masks[0].height, math.ceil(max(inner, outer) * S + abs(slope) / 2))
+    if end <= first:
+        return
+    rows = end - first
+    # At each of 16 subpixel centres, look up the distance from the local
+    # tangent. The box average also integrates the reflection's one-sided cut.
+    factor = direction * _EDGE_PROFILE_DENSITY / normal
+    origin = radius * _EDGE_PROFILE_DENSITY + factor * ((first + slope / 2) / S - edge_y)
+    transform = (0., 0., .5, -slope * factor / (4*S), factor / (4*S), origin)
+    for mask, profile, opacity in zip(masks, profiles, (fade*shadow/255, fade, fade, fade, fade)):
+        samples = profile.transform((4, rows*4), Image.Transform.AFFINE, transform,
+                                    Image.Resampling.NEAREST)
+        column = samples.resize((1, rows), Image.Resampling.BOX)
+        if opacity != 1.:
+            column = Image.frombytes('L', column.size, bytes(round(a*opacity) for a in column.tobytes()))
+        mask.paste(column, (x, first))
+
+
 def wing_edge_effects(padding=0, draw_from=None, draw_to=None, variant=None,
                       context_split=None, top_padding=0):
     """Render the original exterior edge effects through the curved wing tips."""
@@ -771,6 +821,16 @@ def wing_edge_effects(padding=0, draw_from=None, draw_to=None, variant=None,
     tip_curve_height = math.sqrt(max(1., RADIUS ** 2 - extension_start ** 2))
     extension_span = max(1., texture_end - extension_start)
 
+    def bounds(distance):
+        if distance <= extension_start:
+            return geo.wing_backing_bounds(CX + distance)
+        progress = _smooth((distance - extension_start) / extension_span)
+        natural_height = math.sqrt(max(1., RADIUS ** 2 - distance ** 2)) / tip_curve_height
+        half_height = tip_half_height * (1. + (natural_height - 1.) * progress)
+        centre = tip_centre + geo.top(CX + distance) - geo.top(tip_x)
+        return centre - half_height, centre + half_height
+
+    profiles = _wing_edge_profiles(style)
     context_columns = set()
     for side in (-1, 1):
         if side > 0:
@@ -798,67 +858,14 @@ def wing_edge_effects(padding=0, draw_from=None, draw_to=None, variant=None,
                     * _smooth((CX + texture_end - right_x)
                               / (CX + texture_end - fade_start))
                 )
-            if distance <= extension_start:
-                upper, lower = geo.wing_backing_bounds(right_x)
-            else:
-                progress = _smooth((distance - extension_start) / extension_span)
-                natural_height = math.sqrt(max(
-                    1., RADIUS ** 2 - distance ** 2
-                )) / tip_curve_height
-                height_scale = 1. + (natural_height - 1.) * progress
-                centre = tip_centre + geo.top(right_x) - geo.top(tip_x)
-                half_height = tip_half_height * height_scale
-                upper, lower = centre - half_height, centre + half_height
-
-            normal_scale = 1. / math.cos(math.radians(angle(right_x)))
-            extension_strength = _smooth(
-                (distance - extension_start) / 10.0
-            )
-            for edge_y, direction, shadow_alpha in (
-                (upper, -1, 36. + 36. * extension_strength),
-                (lower, 1, 44. + 40. * extension_strength),
-            ):
-                max_vertical = 14. * normal_scale
-                local_edge_y = edge_y + top_padding
-                first_y = max(0, math.ceil((local_edge_y - max_vertical) * S - .5))
-                last_y = min(size[1] - 1, math.floor((local_edge_y + max_vertical) * S - .5))
-                for yy in range(first_y, last_y + 1):
-                    pixel_y = (yy + .5) / S
-                    outward_distance = (pixel_y - local_edge_y) * direction
-                    normal_distance = outward_distance / normal_scale
-                    if not 0. <= normal_distance <= 14.:
-                        continue
-                    shadow = shadow_alpha * math.exp(
-                        -.5 * ((normal_distance - 2.) / 3.4) ** 2)
-                    bloom = 52. * math.exp(-.5 * (normal_distance / 2.2) ** 2)
-                    reflection = style['reflection_alpha'] * math.exp(
-                        -.5 * (normal_distance / style['reflection_sigma']) ** 2
-                    )
-                    soft_glow = style['edge_glow_alpha'] * math.exp(
-                        -.5 * (normal_distance / style['edge_glow_sigma']) ** 2
-                    )
-                    for target, value in zip(
-                            pixels, (shadow, bloom, reflection, 0., soft_glow)):
-                        target[xx, yy] = round(value * fade)
-
-                # Carry one fine core only beyond the backing tip. Its colour
-                # matches the wing-edge stroke; the content-face outlines stay
-                # untouched, and the same fade keeps the extension connected.
-                if extension_strength > 0.:
-                    core_alpha = style['tail_alpha'] * extension_strength * fade
-                    core_radius = style['tail_radius'] / S
-                    local_edge_y = edge_y + top_padding
-                    first_y = max(0, math.ceil((local_edge_y - core_radius) * S - .5))
-                    last_y = min(size[1] - 1, math.floor((local_edge_y + core_radius) * S - .5))
-                    for yy in range(first_y, last_y + 1):
-                        pixel_y = (yy + .5) / S
-                        core_distance = abs(pixel_y - local_edge_y) / normal_scale
-                        coverage = math.exp(
-                            -.5 * (core_distance / style['tail_sigma']) ** 2
-                        )
-                        pixels[3][xx, yy] = max(
-                            pixels[3][xx, yy], round(core_alpha * coverage)
-                        )
+            before = bounds(distance - .5 / S)
+            after = bounds(distance + .5 / S)
+            extension_strength = _smooth((distance - extension_start) / 10.)
+            shadows = (36. + 36. * extension_strength, 44. + 40. * extension_strength)
+            for y, lo, hi, direction, shadow in zip(bounds(distance), before, after, (-1, 1), shadows):
+                slope = side * (hi - lo) * S
+                _edge_column(masks, profiles, xx, y + top_padding, slope, direction,
+                             style['tail_radius'], fade, shadow)
 
     if variant in FILTERED_RACE_EDGE_VARIANTS:
         # Filter before trimming so every owned boundary texel sees the same
@@ -893,22 +900,12 @@ def wing_edge_effects(padding=0, draw_from=None, draw_to=None, variant=None,
         masks[4] = _repeat_alpha_layers(masks[4], edge_glow_layers)
 
     image = Image.new("RGBA", size)
-    colours = ((3, 12, 22), ICE_GLOW, (111, 178, 215), CYAN, CYAN)
-    extension_targets = {1: CYAN, 2: (150, 210, 238), 3: (150, 210, 238)}
-    for index, (colour, mask) in enumerate(zip(colours, masks)):
-        target = extension_targets.get(index)
-        if target is None:
-            layer = Image.new("RGBA", image.size, colour + (0,))
-            layer.putalpha(mask)
-        else:
-            gradient = Image.new('RGB', (size[0], 1))
-            gradient.putdata([
-                tuple(round(base + (end - base) * _smooth(
-                    (abs((xx + .5) / S - padding - CX) - extension_start) / 10.
-                )) for base, end in zip(colour, target))
-                for xx in range(size[0])
-            ])
-            layer = gradient.resize(size, Image.Resampling.NEAREST).convert('RGBA')
-            layer.putalpha(mask)
-        image = Image.alpha_composite(image, layer)
+    # Layer pale reflected light over the same cyan underlay as the outer ring.
+    # The root and tip fades above control the entire run, including its core.
+    ring_core = (150, 210, 238)
+    colours = ((3, 12, 22), CYAN, ring_core, ring_core, CYAN)
+    for colour, mask in zip(colours, masks):
+        layer = Image.new("RGBA", image.size, colour + (0,))
+        layer.putalpha(mask)
+        image.alpha_composite(layer)
     return image
