@@ -35,6 +35,11 @@ paths come from the ignored `project.local.json`.
   HUD scale. Use source and decoded assets for offline diagnostics.
 - Run focused checks for the change. Recompile affected DLLs and run native tests
   for C++ edits. Reuse validated assets and DLLs for unrelated changes.
+- Every development handoff asks the implementing agent for a verification
+  handoff. Request the exact branch and commit, a summary mapped to the requested
+  changes, the SWOFTY version verified, checks and their results, links to relevant
+  logs or screenshots, and any gaps, warnings, or decisions that need review.
+  Include the package and install status and the remaining in-game checks.
 
 ## Git history
 
@@ -75,5 +80,8 @@ paths come from the ignored `project.local.json`.
 - Use `python -B tools/project.py status` and `check` for local checks. Use
   `logs LOGFILE` for warning and failure details.
 - Report the actual SWOFTY version, package/install checks and in-game results.
+  Whenever you recommend a candidate for in-game testing or confirm it is ready,
+  give the owner a bullet checklist with one item per distinct check. Include
+  where to test it and what should happen when that matters.
   The release tool refreshes generated facts in PROJECT_STATE.md. Update its
   handoff notes in place when owner feedback or the next test changes.
