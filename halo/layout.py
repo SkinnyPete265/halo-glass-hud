@@ -94,7 +94,8 @@ BATTERY_WIDTH, BATTERY_HEIGHT = STYLE['battery_width'], STYLE['battery_height']
 BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .28
 BATTERY_TEXTURE_RESOLUTION = 3
 BATTERY_FILL_FEATHER = 0.0
-BATTERY_FILL_INSET = 3.0
+# Let the fill meet the one-pixel rim with one supersampled texel of overlap.
+BATTERY_FILL_INSET = 1.0 - 1.0 / BATTERY_TEXTURE_RESOLUTION
 DRS_CENTRE = (CX, 211.0)
 # All DRS status text uses the same native family as the HUD readouts.
 DRS_STATUS_TEXT_SIZE = 17.5

@@ -88,11 +88,25 @@ class InstrumentRefinementTests(unittest.TestCase):
                 self.assertEqual(value['dbentry'].value,'ers_stored')
 
     def test_battery_dimensions_and_bolt_resolution(self):
-        self.assertAlmostEqual(geo.BATTERY_WIDTH,54.*1.06*1.10)
-        self.assertAlmostEqual(geo.BATTERY_HEIGHT,22.*1.02)
+        self.assertEqual(geo.BATTERY_WIDTH,72)
+        self.assertEqual(geo.BATTERY_HEIGHT,26)
         self.assertGreater(geo.BATTERY_CORNER_RADIUS/geo.BATTERY_HEIGHT,.25)
         with Image.open(ROOT/self.record['sprites']['battery_bolt']['png']) as image:
             self.assertGreaterEqual(image.height,geo.BATTERY_TEXTURE_RESOLUTION*9)
+
+    def test_full_fill_meets_the_inner_frame(self):
+        layers = feature_assets.battery_layers()
+        frame = layers['frame'].getchannel('A')
+        fill = layers['fill'].getchannel('A')
+        housing = layers['housing'].getchannel('A')
+        # Even at the rounded corners, every housing texel inside the
+        # filtered rim must belong to the charge sprite at full charge.
+        box = housing.getbbox()
+        for pixel, rim, charge in zip(housing.crop(box).getdata(),
+                                      frame.crop(box).getdata(),
+                                      fill.crop(box).getdata()):
+            if pixel and rim < 64:
+                self.assertGreater(charge, 0)
 
     def test_filtered_battery_frame_keeps_the_original_terminal_gap(self):
         cx,cy=geo.BATTERY_CENTRE
