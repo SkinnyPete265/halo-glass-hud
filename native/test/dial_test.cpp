@@ -38,23 +38,42 @@ int main()
     car.ers_capacity = 4e6f;
     car.ers_deploy = 20000;
     dial.frame();
-    assert(hud.text(prefix + "energy_status") == "75%  DEPLOY");
-    car.ers_harvest_k = 40000;
+    assert(hud.text(prefix+"charge") == "75%" && hud.text(prefix+"flow") == "DEPLOYING");
+    assert(hud.text(prefix+"deploy_kw") == "20" && hud.text(prefix+"harvest_kw") == "0");
+    car.ers_harvest_k = 12500; car.ers_harvest_h = 9000;
     dial.frame();
-    assert(hud.text(prefix + "energy_status") == "75%  HARVEST");
-    car.ers_deploy = 39500;
+    assert(hud.text(prefix+"flow") == "HARVESTING" && hud.text(prefix+"harvest_kw") == "22");
+    car.ers_deploy = 22500; // exactly +1 kW
+    car.ers_store = 0;
     dial.frame();
-    assert(hud.text(prefix + "energy_status") == "75%");
+    assert(hud.text(prefix+"flow").empty() && hud.text(prefix+"charge") == "0%");
+    car.ers_deploy = 22501; // display still rounds to 23
+    car.ers_store = car.ers_capacity;
+    dial.frame();
+    assert(hud.text(prefix+"flow") == "DEPLOYING" && hud.text(prefix+"charge") == "100%");
     car.ers_deploy = std::numeric_limits<float>::quiet_NaN();
+    car.ers_capacity = 0;
     dial.frame();
-    assert(hud.text(prefix + "energy_status") == "75%");
-    car.have &= ~SWOFTY_LIVE_HAVE_ERS_STORE;
-    car.ers_deploy = 0;
-    dial.frame();
-    assert(hud.text(prefix + "energy_status") == "HARVEST");
+    assert(hud.text(prefix+"flow").empty() && hud.text(prefix+"charge") == "-");
+    assert(hud.text(prefix+"deploy_kw") == "-" && hud.text(prefix+"harvest_kw") == "22");
     car.have &= ~SWOFTY_LIVE_HAVE_ERS_POWER;
+    car.have |= SWOFTY_LIVE_HAVE_ERS_MODE | SWOFTY_LIVE_HAVE_SPEED;
+    car.speed = 69.4444f;
+    const char *modes[] = {"NONE", "MEDIUM", "OVERTAKE", "HOTLAP", "-"};
+    for (int i=0; i<5; ++i) {
+        car.ers_mode = i;
+        dial.frame();
+        assert(hud.text(prefix+"mode") == modes[i]);
+    }
+    assert(hud.text(prefix+"kph") == "250" && hud.text(prefix+"mph") == "155");
+    assert(hud.text(prefix+"harvest_kw") == "-");
+    car.speed = 0;
+    car.have &= ~SWOFTY_LIVE_HAVE_ERS_MODE;
     dial.frame();
-    assert(hud.text(prefix + "energy_status").empty());
+    assert(hud.text(prefix+"kph") == "0" && hud.text(prefix+"mode") == "-");
+    car.speed = std::numeric_limits<float>::infinity();
+    dial.frame();
+    assert(hud.text(prefix+"mph") == "-");
 
     for (int gear = 1; gear <= 8; ++gear) {
         car.gear = gear;
