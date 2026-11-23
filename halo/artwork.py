@@ -26,7 +26,8 @@ def shoulder_glass():
     reach = root + fade_length
     top = geo.WHITE_ARC_TOP
     surround_bottom = 202. + .18*(math.hypot(reach,95.)-95.)
-    bottom = max(surround_bottom, geo.wing_backing_bounds(geo.CX+reach)[1])
+    bottom = max(surround_bottom, geo.wing_backing_bounds(geo.CX-reach)[1],
+                 geo.wing_backing_bounds(geo.CX+reach)[1])
     image = Image.new('RGBA',(geo.WIDTH*S,math.ceil((bottom+2-top)*S)))
     pixels = image.load()
     for xx in range(round((geo.CX-reach)*S),round((geo.CX+reach)*S)):

@@ -16,7 +16,8 @@ WHITE_ARC_CROWN = CY - 1.5 * 89.
 WHITE_ARC_TOP = math.floor(WHITE_ARC_CROWN) - 4
 # Projected halo centreline: gently bowed across the front, turning back
 # toward the driver on both sides. Units are artwork pixels.
-HALO_FOCAL_LENGTH = 305.0
+LEFT_HALO_FOCAL_LENGTH = 270.0
+RIGHT_HALO_FOCAL_LENGTH = 305.0
 
 
 # Treat the previously approved 110% size as the new 100% baseline.
@@ -42,22 +43,27 @@ WING_TEXTURE_PADDING = max(0, math.ceil(WING_TEXTURE_END - 2 * CX) + 6)
 WING_CORNER_RADIUS = 8.0
 
 
+def focal_length(x):
+    return LEFT_HALO_FOCAL_LENGTH if x < CX else RIGHT_HALO_FOCAL_LENGTH
+
+
 def top(x):
-    return 39. + (x-CX)**2 / (4*HALO_FOCAL_LENGTH)
+    return 39. + (x-CX)**2 / (4*focal_length(x))
 
 
 @lru_cache(maxsize=65536)
 def wing_surface_y(x, depth):
     """Intersect a vertical texture column with a normal offset of the halo."""
+    focal = focal_length(x)
     offset = depth + WING_FACE_TOP - WING_CENTER_OFFSET
     distance = abs(x-CX)
     run = distance
     for _ in range(4):
-        slope = run/(2*HALO_FOCAL_LENGTH)
+        slope = run/(2*focal)
         normal_length = math.hypot(1., slope)
         error = run - offset*slope/normal_length - distance
-        run -= error / (1. - offset/(2*HALO_FOCAL_LENGTH*normal_length**3))
-    return top(CX+run) + WING_CENTER_OFFSET + offset/math.hypot(1., run/(2*HALO_FOCAL_LENGTH))
+        run -= error / (1. - offset/(2*focal*normal_length**3))
+    return (39. + run**2/(4*focal)) + WING_CENTER_OFFSET + offset/math.hypot(1., run/(2*focal))
 
 
 def wing_backing_bounds(x):
@@ -69,7 +75,7 @@ def wing_face_edges(x):
 
 
 def tail_bottom():
-    return wing_backing_bounds(WING_TEXTURE_END)[1]
+    return max(wing_backing_bounds(x)[1] for x in (2*CX-WING_TEXTURE_END, WING_TEXTURE_END))
 
 
 WING_TIP_TOP = wing_backing_bounds(WING_FACE_END)[0]
@@ -182,7 +188,7 @@ def gears_caption():
     return Text(x, top(x) + STYLE['gears_y'], STYLE['gears_size'], angle(x))
 
 def angle(x):
-    return math.degrees(math.atan((x-CX)/(2*HALO_FOCAL_LENGTH)))
+    return math.degrees(math.atan((x-CX)/(2*focal_length(x))))
 
 def wing_content_x(x):
     """Keep wing-mounted content at the same relative position as each wing grows."""
@@ -219,8 +225,8 @@ def drs_rail_points(edge, side=1):
 
 def arc_length(x):
     run = x-CX
-    slope = run/(2*HALO_FOCAL_LENGTH)
-    return .5*run*math.hypot(1., slope) + HALO_FOCAL_LENGTH*math.asinh(slope)
+    slope = run/(2*focal_length(x))
+    return .5*run*math.hypot(1., slope) + focal_length(x)*math.asinh(slope)
 
 def gear_position(gear):
     distance = arc_length(780.0) + (
@@ -228,7 +234,7 @@ def gear_position(gear):
     ) * (gear - 1) / 7
     x = CX + distance
     for _ in range(4):
-        x -= (arc_length(x)-distance)/math.hypot(1., (x-CX)/(2*HALO_FOCAL_LENGTH))
+        x -= (arc_length(x)-distance)/math.hypot(1., (x-CX)/(2*focal_length(x)))
     x = wing_content_x(x)
     return Text(x, top(x) + GEAR_ROW_OFFSET, GEAR_NUMBER_SIZE, angle(x) * 0.25)
 
