@@ -14,11 +14,7 @@ ARTWORK_TOP_PADDING = 24.0
 WHITE_ARC_CROWN = CY - 1.5 * 89.
 WHITE_ARC_TOP = math.floor(WHITE_ARC_CROWN) - 4
 # Both panels wrap around the dial on the same arc, in art pixels.
-WING_FACE_RADIUS = 655.0
-# Continue the offset curves along their common tangent past the visible trace.
-WING_TANGENT_LIMIT = math.radians(55.)
-WING_LIMIT_SIN = math.sin(WING_TANGENT_LIMIT)
-WING_LIMIT_COS = math.cos(WING_TANGENT_LIMIT)
+WING_FACE_RADIUS = 890.0
 
 
 # Treat the previously approved 110% size as the new 100% baseline.
@@ -50,10 +46,7 @@ def wing_surface_y(x, depth):
     radius = outer - depth
     distance = abs(x - CX)
     crown = 49.
-    join = radius * WING_LIMIT_SIN
-    if distance <= join:
-        return crown + outer - math.sqrt(radius * radius - distance * distance)
-    return crown + outer - radius * WING_LIMIT_COS + (distance-join) * math.tan(WING_TANGENT_LIMIT)
+    return crown + outer - math.sqrt(radius * radius - distance * distance)
 
 
 def top(x):
@@ -184,7 +177,7 @@ def gears_caption():
 
 def angle(x):
     radius = WING_FACE_RADIUS - (WING_CENTER_OFFSET-WING_FACE_TOP)
-    return math.copysign(math.degrees(math.asin(min(WING_LIMIT_SIN, abs(x-CX)/radius))), x-CX)
+    return math.degrees(math.asin((x-CX)/radius))
 
 def wing_content_x(x):
     """Keep wing-mounted content at the same relative position as each wing grows."""
@@ -221,8 +214,7 @@ def drs_rail_points(edge, side=1):
 
 def arc_length(x):
     radius = WING_FACE_RADIUS - (WING_CENTER_OFFSET-WING_FACE_TOP)
-    tail = max(0., abs(x-CX) - radius*WING_LIMIT_SIN)
-    return radius*math.radians(angle(x)) + math.copysign(tail/WING_LIMIT_COS, x-CX)
+    return radius*math.asin((x-CX)/radius)
 
 def gear_position(gear):
     distance = arc_length(780.0) + (

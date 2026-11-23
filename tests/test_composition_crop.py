@@ -64,7 +64,7 @@ class CompositionCropTests(unittest.TestCase):
                     self.assertEqual(crop, STABLE_BASE_CROP)
                     self.assertEqual(
                         (right - left, bottom - top),
-                        (3728, 1936 + round(layout.ARTWORK_TOP_PADDING
+                        (3728, 1416 + round(layout.ARTWORK_TOP_PADDING
                                            * layout.BASE_TEXTURE_RESOLUTION)),
                     )
                 else:
