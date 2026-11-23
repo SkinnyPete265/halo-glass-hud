@@ -18,6 +18,7 @@ from project_config import local_settings, launcher_command
 from stage_timing import Timings
 
 ROOT = Path(__file__).resolve().parents[1]
+SWOFTY_INSTALL_INDEX = ".swofty-files.json"
 
 
 def run(command, log=None):
@@ -50,6 +51,15 @@ def game_running():
     return result.stdout.strip() not in ("", "0")
 
 
+def installed_payload(installed):
+    """List addon payload files without the launcher's generated inventory."""
+    return {
+        path.relative_to(installed).as_posix(): path
+        for path in installed.rglob("*")
+        if path.is_file() and path != installed / SWOFTY_INSTALL_INDEX
+    }
+
+
 def preserve_installed(settings, manifest):
     installed = Path(settings["data_dir"]) / "addons" / manifest["id"]
     if not (installed / "swofty.json").exists():
@@ -62,8 +72,8 @@ def preserve_installed(settings, manifest):
     target = backup / "dist" / (manifest["id"] + ".swoftyaddon")
     if target.exists() and not installed_matches(target, installed):
         digest = hashlib.sha256()
-        for path in sorted(item for item in installed.rglob("*") if item.is_file()):
-            digest.update(path.relative_to(installed).as_posix().encode("utf-8"))
+        for name, path in sorted(installed_payload(installed).items()):
+            digest.update(name.encode("utf-8"))
             digest.update(b"\0")
             with path.open("rb") as source:
                 for block in iter(lambda: source.read(1024 * 1024), b""):
@@ -78,9 +88,8 @@ def preserve_installed(settings, manifest):
         pending = target.with_suffix(".tmp")
         try:
             with zipfile.ZipFile(pending, "w", zipfile.ZIP_DEFLATED) as archive:
-                for path in sorted(installed.rglob("*")):
-                    if path.is_file():
-                        archive.write(path, path.relative_to(installed).as_posix())
+                for name, path in sorted(installed_payload(installed).items()):
+                    archive.write(path, name)
             with zipfile.ZipFile(pending) as archive:
                 if archive.testzip():
                     raise RuntimeError("Rollback archive CRC failed")
@@ -97,13 +106,10 @@ def installed_matches(package, installed):
     try:
         with zipfile.ZipFile(package) as archive:
             names = {name for name in archive.namelist() if not name.endswith("/")}
-            actual = {
-                path.relative_to(installed).as_posix()
-                for path in installed.rglob("*")
-                if path.is_file()
-            }
-            return names == actual and all(
-                (installed / name).read_bytes() == archive.read(name) for name in names
+            names.discard(SWOFTY_INSTALL_INDEX)
+            actual = installed_payload(installed)
+            return names == actual.keys() and all(
+                actual[name].read_bytes() == archive.read(name) for name in names
             )
     except (OSError, ValueError, zipfile.BadZipFile):
         return False

@@ -144,6 +144,7 @@ class CompatibilityTests(unittest.TestCase):
                 '{"version":"0.14.1"}', encoding="utf-8"
             )
             (installed / "candidate.bin").write_bytes(b"currently installed")
+            (installed / ".swofty-files.json").write_text("{}", encoding="utf-8")
 
             archive_root = root / "local/archive/rollbacks"
             old_backup = archive_root / "rollback-v0.14.1"
@@ -163,6 +164,10 @@ class CompatibilityTests(unittest.TestCase):
             self.assertEqual(backup.parent, archive_root)
             self.assertNotEqual(backup, old_backup)
             self.assertTrue(project.installed_matches(snapshot, installed))
+            with zipfile.ZipFile(snapshot) as archive:
+                self.assertNotIn(".swofty-files.json", archive.namelist())
+            (installed / "unexpected.bin").write_bytes(b"unpackaged file")
+            self.assertFalse(project.installed_matches(snapshot, installed))
 
 
 if __name__ == "__main__":
