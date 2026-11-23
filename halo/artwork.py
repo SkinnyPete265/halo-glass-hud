@@ -20,29 +20,45 @@ def canvas(top_padding=0):
                                round((geo.HEIGHT + top_padding) * S)))
 
 def shoulder_glass():
-    """Diffuse glass behind the disc and first section of each wing."""
+    """Smoked pane with a reflected sky edge and a bevel, behind the instruments."""
     reach = 350
     top = geo.WHITE_ARC_TOP
     image = Image.new('RGBA',(geo.WIDTH*S,round((275-top)*S)))
     pixels = image.load()
     for xx in range(round((geo.CX-reach)*S),round((geo.CX+reach)*S)):
-        dx = abs((xx+.5)/S-geo.CX)
-        curve = math.hypot(dx,95.)-95.
-        upper = -30. + .62*curve
-        lower = 202. + .18*curve
+        x = (xx+.5)/S-geo.CX
+        dx = abs(x)
+        upper = white_arc_y(x)
+        lower = 202. + .18*(math.hypot(dx,95.)-95.)
         end = 1.-mat._smooth((dx-175.)/(reach-175.))
+        # Localised catches break up the reflection as it turns over each shoulder.
+        catch = .28 + .72*math.exp(-((x+118.)/90.)**2)
+        horizon = 22. + .18*x + .12*(math.hypot(x,85.)-85.)
         for yy in range(math.floor((upper-top)*S),math.ceil((lower-top)*S)):
             y = top+(yy+.5)/S
-            rim = mat._smooth((math.hypot(dx,y-geo.CY)-89.)/6.)
-            edge = mat._smooth((y-upper)/33.)*mat._smooth((lower-y)/31.)
-            # A pale reflected strip blends into a denser blue-grey body.
-            reflection = math.exp(-((y-upper-24.)/20.)**2)
-            lower_light = math.exp(-((lower-y-27.)/22.)**2)
-            light = reflection + .38*lower_light
-            alpha = round(192*edge*end*rim)
-            pixels[xx,yy] = (round(42+95*light),round(55+94*light),
-                             round(82+83*light),alpha)
+            radius = math.hypot(x,y-geo.CY)
+            cover = end*mat._smooth((radius-89.)/4.)
+            depth = y-upper
+            cover *= mat._smooth(depth/3.)*mat._smooth((lower-y)/9.)
+            # The pane transmits scenery through its body. A reflected patch
+            # of sky has a defined horizon on one side and a soft roll-off above.
+            distance = y-horizon
+            sky = math.exp(-(distance/(6. if distance>0 else 32.))**2)
+            sky *= .23 + .77*math.exp(-((x+65.)/152.)**2)
+            bevel = catch*math.exp(-((depth-3.)/1.8)**2)
+            bevel += .42*math.exp(-((lower-y-4.)/1.8)**2)
+            smoke = 43. + 67.*math.exp(-((radius-99.)/20.)**2)
+            reflected = 95.*sky + 120.*bevel
+            total = smoke+reflected
+            alpha = round(min(255.,total)*cover)
+            if alpha:
+                pixels[xx,yy] = tuple(round((base*smoke+light*reflected)/total)
+                                      for base,light in ((19,218),(28,230),(40,238)))+(alpha,)
     return image
+
+
+def white_arc_y(x):
+    return geo.WHITE_ARC_CROWN + .69*(math.hypot(x,110.)-110.)
 
 
 def white_arc():
@@ -56,7 +72,7 @@ def white_arc():
     for xx in range(round((geo.CX-half_span)*S),round((geo.CX+half_span)*S)):
         dx = (xx+.5)/S - geo.CX
         radius = math.hypot(dx,bend)
-        y = (geo.WHITE_ARC_CROWN-geo.WHITE_ARC_TOP + rise*(radius-bend))*S
+        y = (white_arc_y(dx)-geo.WHITE_ARC_TOP)*S
         normal = math.hypot(1.,rise*dx/radius)
         fade = max(0.,(abs(dx)-55)/(half_span-55))
         opacity = 205*(1-fade*fade*(3-2*fade))**2
