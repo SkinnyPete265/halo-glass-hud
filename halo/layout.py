@@ -13,13 +13,13 @@ CX, CY = 582.0, 95.0
 ARTWORK_TOP_PADDING = 24.0
 WHITE_ARC_CROWN = CY - 1.5 * 89.
 WHITE_ARC_TOP = math.floor(WHITE_ARC_CROWN) - 4
-# A wider arc reduces the falloff across extended wings while preserving the
-# hub and the wings' cross-section height.
-RADIUS = 850.0
+# Circular fit to the mean of the two visible wing faces in the reference,
+# normalized to the 178-pixel instrument disc.
+RADIUS = 655.0
 
 
 def top(x):
-    return 30.0 + RADIUS - math.sqrt(RADIUS ** 2 - (x - CX) ** 2)
+    return 37.0 + RADIUS - math.sqrt(RADIUS ** 2 - (x - CX) ** 2)
 
 
 # Treat the previously approved 110% size as the new 100% baseline.
@@ -82,7 +82,7 @@ def wing_face_edges(x):
 
 WING_TIP_TOP = wing_backing_bounds(WING_FACE_END)[0]
 WING_TIP_BOTTOM = wing_backing_bounds(WING_FACE_END)[1]
-HEIGHT = max(440, math.ceil(wing_backing_bounds(WING_EFFECT_END)[1] + 45.0))
+HEIGHT = max(440, math.ceil(wing_backing_bounds(WING_TEXTURE_END)[1] + 6.0))
 DRS_RAIL_START = WING_FACE_START + WING_CORNER_RADIUS
 DRS_RAIL_END = WING_FACE_END
 DRS_RAIL_EDGES = ('top', 'bottom')
@@ -90,7 +90,7 @@ DRS_OPEN_CURVE = 'generic_fade_on_slow'
 DRS_OPEN_DURATION = .30
 DRS_CLOSE_DURATION = .075
 DRS_CLOSE_CURVE = 'generic_fade_off_fast'
-HUD_BOX_BOTTOM = max(422.0, wing_backing_bounds(WING_EFFECT_END)[1] + 34.0)
+HUD_BOX_BOTTOM = max(422.0, wing_backing_bounds(WING_TEXTURE_END)[1] + 2.0)
 BATTERY_CENTRE = (CX, STYLE['battery_y'])
 BATTERY_WIDTH, BATTERY_HEIGHT = STYLE['battery_width'], STYLE['battery_height']
 BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .16
@@ -302,9 +302,9 @@ def refresh_style(style=None):
     WING_TEXTURE_NATIVE_END_DISTANCE = min(CX, WIDTH - CX) - 3.0
     WING_TEXTURE_PADDING = max(0, math.ceil(WING_TEXTURE_END - 2 * CX) + 6)
     WING_TIP_TOP, WING_TIP_BOTTOM = wing_backing_bounds(WING_FACE_END)
-    HEIGHT = max(440, math.ceil(wing_backing_bounds(WING_EFFECT_END)[1] + 45.0))
+    HEIGHT = max(440, math.ceil(wing_backing_bounds(WING_TEXTURE_END)[1] + 6.0))
     DRS_RAIL_END = WING_FACE_END
-    HUD_BOX_BOTTOM = max(422.0, wing_backing_bounds(WING_EFFECT_END)[1] + 34.0)
+    HUD_BOX_BOTTOM = max(422.0, wing_backing_bounds(WING_TEXTURE_END)[1] + 2.0)
     BATTERY_CENTRE = (CX, STYLE['battery_y'])
     BATTERY_WIDTH = STYLE['battery_width']
     BATTERY_HEIGHT = STYLE['battery_height']
