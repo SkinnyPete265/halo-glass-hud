@@ -1,71 +1,67 @@
-# Repository setup
+# Halo Glass HUD build and release guide
 
-The repository tracks authored source, SDK/font notices, agent instructions and
-release helpers. Local settings, game-derived binary inputs, generated textures,
-previews, composed archives and installed packages are excluded.
+Development and release commits live on `main`. The usual workflow is
+**make a change → review and select a commit → package and install a dev build → test in-game → prepare the stable release**.
 
-## Local setup
+Use [the GitHub steps](#build-package-and-install-step-by-step) for the normal
+release. Use [the PowerShell steps](#build-on-the-pc-without-github) if you want
+to run a release directly on the PC. Choose one route per build.
 
-Use Python 3.14 and install requirements.txt. Copy project.local.example.json to
-project.local.json and set the launcher, data directory, profile and game paths.
-Native builds use Zig. The required local inputs are
-native/reference/native-controls.erpk and native/reference/drs-template.bin.
-Keep an existing local copy of those inputs. tools/extract_native_reference.py can
-capture them from the legacy addon and stock archive using its documented flags.
-Fresh source clones require those local inputs before full composition.
+## What each stage does
 
-## Optional local checks
+| Stage | What it does |
+| --- | --- |
+| Commit and push | A commit saves a snapshot of the source with an ID called a SHA. Pushing sends that snapshot to GitHub so the release can use it. A tag is a separate label you can give a verified release commit after building. |
+| Source checks | Python tests check the build tools, HUD geometry and generated HUD records. Native fixtures test the C++ publishers that feed values such as gear and energy flow to the HUD. These checks run without launching F1 25. |
+| Build and compose | The Windows PC generates the artwork and compiles any DLLs that need rebuilding. SWOFTY combines the HUD records and textures with stock game resources to produce game-ready archives for both dials and the shared editor. |
+| Package | Bundles the validated archives, DLLs, manifest and changelog into a `.swoftyaddon` file. `package` mode ends here. |
+| Install and verify | Adds or updates the package in SWOFTY, enables Halo in `Halo-HUD-Dev`, builds the profile's game-ready cache, and checks its files and resources against the package and composed outputs. `install` mode includes packaging. |
+| In-game test | You manually launch F1 25 through SWOFTY and check the changes. This is where we verify real gameplay behaviour and appearance. |
 
-- `python -B tools/project.py status` shows the source and installed versions,
-  whether the target profile exists and has Halo enabled, local inputs and
-  whether F1 25 is running.
-- `python -B tools/project.py check` runs the project's source checks locally.
-  The GitHub workflow runs these checks for you when you dispatch a build.
-
-The release steps start at [Build, package and install step by step](#build-package-and-install-step-by-step).
-
-GitHub Actions runs the Python checks and native fixtures in separate Windows jobs.
-The native job pins Zig 0.17.0 and uses the vendored SDK. Run the same fixtures
-locally with `python -B tools/build.py --native-tests`. Composition and live
-checks use the local game inputs.
-If the Zig executable on PATH is inaccessible, set the optional `zig` path
-in project.local.json or pass `--zig` to tools/build.py.
-
-The source checks validate the generated HUD registry against SWOFTY's HUD
-schema 1.4. The first run downloads the checksum-pinned validator and schema
-from the 1.10.21 source revision. Later runs reuse build/sdk-validation/.
-Composition checks SWOFTY's active stock game against project.local.json
-before using its archives. A full compose also logs `swofty hud check`.
+**Who does what?** GitHub runs the source checks and queues the request. A
+scheduled Windows task picks it up and does the build and install using the
+game files on your PC. The green GitHub check tells you the request reached the
+queue. The Windows worker's `cache_verified` result tells you when to launch.
 
 ## Build, package and install step by step
 
 1. **Start on `main`.** This is the only working branch. From the repo in
    PowerShell, run `git status --short --branch` and sync with
-   `git pull --ff-only` when ready. A versioned package and its recorded commit
-   are the rollback checkpoint.
+   `git pull --ff-only` when ready. `git status` shows local edits and whether
+   your branch is ahead of or behind GitHub. The fast-forward-only pull updates
+   your branch without creating a merge commit.
 2. **Set the version.** In `swofty.json`, set the version to build. Add a
    nonempty `##` section for the exact same version in `CHANGELOG.md`. Run
    `python -B tools/project.py notes` to see the entry that will be packaged.
-   Commit the version and changelog together and push `main`. You can record
-   the commit with `git rev-parse HEAD`. A Git tag can be added after verification.
+   If the candidate already has the right version and notes, use its existing
+   commit. Otherwise stage the two files with `git add -- swofty.json CHANGELOG.md`
+   and commit them with `git commit -m "Prepare dev test release"`. Push `main` with
+   `git push origin main`. `git rev-parse HEAD` prints the exact SHA to review
+   or rebuild later.
 3. **Dispatch one build.** Close F1 25 and other SWOFTY Launcher windows to
    avoid file locks, and leave the release PC signed in. In GitHub, open
    **Actions → Local release → Run workflow**. Select `main`. If the approved
    commit is the latest on `main`, leave **commit** blank. Otherwise paste its
-   full 40-character SHA from `main` history without angle brackets. Keep **mode** at `install`
-   for a playable build, or choose `package` to create the file only. Click
+   full 40-character SHA from `main` history without angle brackets. Keep **mode**
+   at `install` for a playable build, or choose `package` to create the file only. Click
    **Run workflow** once. The CLI equivalent for current `main` is
    `gh workflow run local-release.yml --ref main -f mode=install`.
 4. **Wait for the Windows result.** GitHub's green check means the request passed
    source checks and is queued. Use `python -B tools/local_release.py status RUN_ID`
    on the release PC, replacing `RUN_ID` with the number at the end of the GitHub
-   run URL. Wait for `cache_verified`
-   for install or `packaged` for package-only. The result gives the versioned
-   `.swoftyaddon`, evidence directory and rollback location. Approved installs
-   target `Halo-HUD-Dev` through `project.local.json`.
+   run URL. For example, `python -B tools/local_release.py status 45087449907`
+   looks up that specific historical run. Wait for `cache_verified` for install
+   or `packaged` for package-only. The result gives the versioned `.swoftyaddon`
+   and the evidence directory. For installs it also records the cache and any
+   rollback package. `project.local.json` selects `Halo-HUD-Dev` regardless of
+   which profile is active in SWOFTY.
 5. **Test manually.** After `cache_verified`, open SWOFTY, select `Halo-HUD-Dev`
    and launch F1 25. Use the candidate's gameplay checklist. Keep packages local
    until public distribution is approved.
+6. **Finish the cycle.** Record the in-game result against the tested commit in
+   `PROJECT_STATE.md`. If a fix needs another test, increment the dev suffix.
+   If the test is approved, remove the suffix for the stable release and use
+   the same build and install process. See [version examples](#versions-and-changelogs).
 
 ### Build on the PC without GitHub
 
@@ -83,6 +79,23 @@ headers, fixtures or binary contents change. It reuses verified DLLs for artwork
 changes. Add `--native` to force a rebuild. The helper prints the release
 evidence path under `build/releases/`. For an install, look for
 `installation verification passed`. Run local and GitHub installs one at a time.
+If the helper warns about local tracked edits, the recorded commit may be
+insufficient to reproduce the package. Commit the intended changes before
+building a checkpoint you want to reproduce from GitHub.
+
+### Read the result
+
+| Result | Meaning |
+| --- | --- |
+| `running` | The Windows worker is building, packaging, installing or verifying. |
+| `packaged` | The `.swoftyaddon` is ready to keep or share as approved. |
+| `cache_verified` | The addon is installed and enabled, and the target profile's cache passed verification. Launch the game manually when ready. |
+| `waiting_for_game_close` | The package is ready. For a GitHub job, the worker resumes after the game closes. For a direct PowerShell build, repeat the command after closing the game. |
+| `failed` or `interrupted` | Read the worker log or local release evidence, resolve the issue, then retry the same candidate. |
+
+Keep the versioned package listed in the release record. `dist/` holds the
+latest working package and is overwritten by later builds. The rollback is a
+separate copy of the addon payload that was installed before an update.
 
 ### If a build stops
 
@@ -95,9 +108,34 @@ evidence path under `build/releases/`. For an install, look for
   same command. A worker waiting specifically for game closure resumes on its
   own. Keep the same version for a retry of the same candidate.
 - **Green on GitHub, no install yet.** Check the matching job record and worker
-  log at `local/release-worker/jobs/<run-id>/release.log`. A scheduled poll can
+  log at `local/release-worker/jobs/RUN_ID/release.log`. A scheduled poll can
   take about three minutes. `python -B tools/local_release.py poll` starts the
   same worker immediately on the release PC.
+- **Local build or cache error.** Open the evidence folder printed by the release
+  helper. `compose-vVERSION.log` covers the HUD build. `swofty-build-vVERSION.log`
+  covers cache creation. If cache verification fails, look for `conflicts.log`.
+
+## First-time setup on the release PC
+
+This section is for a fresh checkout or a replacement PC. An existing working
+release PC can proceed directly to the release steps.
+
+1. Install Python 3.14 and run `python -m pip install -r requirements.txt`
+   from the repository. The Python tools generate artwork and orchestrate the
+   build. Zig compiles and tests the native DLLs. Hosted checks pin Zig 0.17.0.
+2. Use `project.local.example.json` as the template for `project.local.json`.
+   The `launcher` is the path to `swofty.exe`, `data_dir` holds SWOFTY's addons,
+   profiles and cache, `profile` selects `Halo-HUD-Dev`, and `game` is the F1 25
+   installation folder. Set `zig` to the executable path if Zig is unavailable on
+   `PATH`. The local configuration stays off GitHub.
+3. Keep a local copy of `native/reference/native-controls.erpk` and
+   `native/reference/drs-template.bin`. Composition uses these captured inputs
+   to preserve native game bindings. Fresh source clones need them before
+   composition. `tools/extract_native_reference.py` can capture them from the
+   legacy addon and stock archive.
+4. Run `python -B tools/project.py status` and check the profile and both native
+   inputs. Make sure SWOFTY's active game points to the same F1 25 installation
+   as `project.local.json` so composition reads the correct stock archives.
 
 ### Windows worker setup
 
@@ -113,12 +151,27 @@ While the owner is signed in, Task Scheduler checks for requests every three
 minutes. The worker uses an isolated checkout under `local/release-worker/`,
 rebuilds the DLLs for the requested commit, and reuses the project's release
 command. If F1 25 is running, the worker resumes installation when it closes.
-Inspect `local/release-worker/jobs/<run-id>.json` for the result and evidence
+Inspect `local/release-worker/jobs/RUN_ID.json` for the result and evidence
 paths. For a failed or interrupted job, inspect its log and dispatch again
 after fixing the problem. Avoid running a manual install concurrently.
 
 The worker reads GitHub over HTTPS. Local inputs, packages and logs stay on the
 PC. To pause polling, disable **Halo HUD local release worker** in Task Scheduler.
+
+## Optional commands for checks and debugging
+
+| Command | When to use it |
+| --- | --- |
+| `python -B tools/project.py status` | Before a local build or when in doubt about the installed version, target profile, local inputs or whether F1 25 is running. |
+| `python -B tools/project.py notes` | After editing the manifest or changelog. Prints the entry that matches the manifest version. |
+| `python -B tools/project.py check` | To run the project's Python checks and HUD schema validation locally. GitHub runs these checks for you when you dispatch a release. |
+| `python -B tools/build.py --native-tests` | To run just the C++ fixtures after editing native code. |
+| `python -B tools/project.py logs LOGFILE` | To summarize warnings and errors from one raw release log. Replace `LOGFILE` with its actual path. |
+| `python -B tools/project.py state` | To refresh the generated facts in `PROJECT_STATE.md` before sharing it with a new chat. |
+
+The source checks use a checksum-pinned HUD schema validator. The first run
+downloads it and later runs reuse `build/sdk-validation/`. Full composition
+also runs SWOFTY's HUD checks on the release PC.
 
 ## Versions and changelogs
 
@@ -192,13 +245,10 @@ hashes. It checks resource metadata, replaces matching pixel fragments and runs 
 native validators. Other changes use full SWOFTY composition automatically. Cached
 outputs and game-derived resources remain local under ignored folders.
 
-Every release attempt refreshes the generated facts block in PROJECT_STATE.md while
-preserving owner notes. Refresh it manually or inspect a compact log summary with
-
-```powershell
-python -B tools/project.py state
-python -B tools/project.py logs build/releases/<run>/compose-v<version>.log
-```
+Every release attempt refreshes the generated facts block in `PROJECT_STATE.md`
+in the checkout it ran from. Run `python -B tools/project.py state` in your
+working checkout when preparing a handoff after a worker run. Use the worker's
+result for that run's exact install evidence.
 
 Raw logs remain available. Summaries show warning totals, newly introduced warnings
 and errors. Successful release/cache verification advances the relevant warning
