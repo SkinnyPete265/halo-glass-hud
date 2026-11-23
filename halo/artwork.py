@@ -19,6 +19,31 @@ def canvas(top_padding=0):
     return Image.new("RGBA", (geo.WIDTH * S,
                                round((geo.HEIGHT + top_padding) * S)))
 
+def white_arc():
+    """Neutral shoulder line, sampled by perpendicular distance at 3x resolution."""
+    half_span = 440
+    rise = .69
+    bend = 110.
+    height = math.ceil(rise*(math.hypot(half_span,bend)-bend)) + 12
+    alpha = Image.new('L',(geo.WIDTH*S,height*S))
+    pixels = alpha.load()
+    for xx in range(round((geo.CX-half_span)*S),round((geo.CX+half_span)*S)):
+        dx = (xx+.5)/S - geo.CX
+        radius = math.hypot(dx,bend)
+        y = (geo.WHITE_ARC_CROWN-geo.WHITE_ARC_TOP + rise*(radius-bend))*S
+        normal = math.hypot(1.,rise*dx/radius)
+        fade = max(0.,(abs(dx)-55)/(half_span-55))
+        opacity = 205*(1-fade*fade*(3-2*fade))**2
+        for yy in range(math.floor(y)-3,math.ceil(y)+3):
+            coverage = max(0.,min(1., .5+.46*S-abs(yy+.5-y)/normal))
+            pixels[xx,yy] = round(opacity*coverage)
+    alpha = mat._box_filter_alpha_3x3(alpha)
+    # Transparent black lets BC7 encode empty blocks with exactly zero alpha.
+    neutral = alpha.point(lambda a: 248 if a else 0)
+    result = Image.merge('RGBA',(neutral,neutral,neutral,alpha))
+    return result
+
+
 def label(image, spec, value, y_offset=0.0, **options):
     if value != 'GEARS' and geo.STYLE['text_colour'] != '#ffffff':
         options['color'] = rgb(geo.STYLE['text_colour']) + (255,)

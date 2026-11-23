@@ -43,7 +43,7 @@ def crop_sprite(name, final):
     if not bounds:
         raise ValueError('Empty sprite ' + name)
     left, top, right, bottom = bounds
-    if name.startswith('lit_'):
+    if name.startswith('lit_') or name=='white_arc':
         # Leave a transparent BC7 block around the filtered edge.
         left, top, right, bottom = left-4, top-4, right+4, bottom+4
     right += (4 - (right - left) % 4) % 4
@@ -99,6 +99,7 @@ def write():
 
     sprite('base',art.texture_base,geo.BASE_TEXTURE_RESOLUTION,
            origin=(-geo.WING_TEXTURE_PADDING, -geo.ARTWORK_TOP_PADDING))
+    sprite('white_arc',art.white_arc,art.S,origin=(0.,geo.WHITE_ARC_TOP))
     sprite('rpm_fill',art.rpm_fill)
     # The composer encodes these full-frame textures for the native input masks.
     # Their resources are consumed by native_interop, with no extra scene quads.
@@ -113,6 +114,7 @@ def write():
     preview = {PREFIX + "kph": "250", PREFIX + "mph": "155", "game.revs": .89, "game.ers_stored": .75,
                "game.has_ers": True, PREFIX + "rpm": "11585",
                PREFIX + "drs_reveal": 0.0, PREFIX + "drs_visible": False}
+    elements.append({'kind':'sprite','id':'white_arc','sprite':'white_arc','layer':21})
     pedal_gate = PREFIX+'pedals_stepped'
     preview[pedal_gate] = False
     elements.append({'kind':'group','id':'pedal_gradual',
@@ -279,7 +281,7 @@ def write():
     preview[PREFIX + "special_gear"] = ""
     record = {"prefix": "halo_v2", "dial": "f1_25", "stock": "hide", "spectator": False,
               "box": geo.hud_bounds([max(0,2*geo.CX-geo.WING_EFFECT_END-11),
-                                     -geo.ARTWORK_TOP_PADDING,
+                                     min(-geo.ARTWORK_TOP_PADDING,geo.WHITE_ARC_TOP),
                                      geo.WING_EFFECT_END+11, geo.HUD_BOX_BOTTOM]),
               "sprites": sprites, "elements": elements,
               "editor": {"preview": preview}}

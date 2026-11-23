@@ -11,6 +11,8 @@ CX, CY = 582.0, 95.0
 # Transparent room for the speedometer's existing outer halo. The disc's
 # current 6 px top clearance is shorter than the 4-sigma glow extent.
 ARTWORK_TOP_PADDING = 24.0
+WHITE_ARC_CROWN = CY - 1.5 * 89.
+WHITE_ARC_TOP = math.floor(WHITE_ARC_CROWN) - 4
 # A wider arc reduces the falloff across extended wings while preserving the
 # hub and the wings' cross-section height.
 RADIUS = 850.0
