@@ -34,7 +34,10 @@ def shoulder_glass():
         upper = (1.-wing)*(-30. + .62*curve) + wing*wing_top
         lower = (1.-wing)*(202. + .18*curve) + wing*wing_bottom
         end = 1.-mat._smooth((dx-220.)/(reach-220.))
-        density = (.48+.52*wing)*end
+        # Keep the soft surround near the dial, then let cockpit detail show
+        # through where the separate instrument face overlaps this artwork.
+        face = mat._smooth((dx-95.)/95.)
+        density = (.48+.52*wing)*(1.-.82*face)*end
         for yy in range(math.floor((upper-top)*S),math.ceil((lower-top)*S)):
             y = top+(yy+.5)/S
             rim = mat._smooth((math.hypot(dx,y-geo.CY)-89.)/6.)
