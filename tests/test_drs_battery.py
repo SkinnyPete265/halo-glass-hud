@@ -233,9 +233,14 @@ class InstrumentRefinementTests(unittest.TestCase):
     def test_drs_rails_and_fade_end_at_the_wing_face_tip(self):
         from halo import drs_motion
         self.assertEqual(geo.DRS_RAIL_END,geo.WING_FACE_END)
-        for edge in geo.DRS_RAIL_EDGES:
-            points=geo.drs_rail_points(edge)
-            self.assertEqual(points[-1][0],round(geo.WING_FACE_END))
+        ends = geo.wing_edge_ends()
+        for side in (-1,1):
+            for k,edge in enumerate(geo.DRS_RAIL_EDGES):
+                points = geo.drs_rail_points(edge,side)
+                self.assertAlmostEqual(points[-1][0],geo.CX+side*ends[side,k])
+                depth = 3. if k==0 else geo.WING_FACE_BOTTOM-geo.WING_FACE_TOP-3.
+                for x,y in points:
+                    self.assertAlmostEqual(y,geo.wing_surface_y(x,depth))
         feature_assets.drs_clip_mask.cache_clear()
         fade=feature_assets.drs_clip_mask()
         before=round((geo.WING_FACE_END-16.)*art.S)
@@ -250,7 +255,7 @@ class InstrumentRefinementTests(unittest.TestCase):
         rails=feature_assets.drs_rails().getchannel('A')
         for side in (-1,1):
             face_tip=round((geo.CX+side*(geo.WING_FACE_END-geo.CX))*art.S)
-            near_tip=round((geo.CX+side*(geo.WING_FACE_END-8.-geo.CX))*art.S)
+            near_tip=round((geo.CX+side*(ends[side,0]-8.))*art.S)
             self.assertGreater(rails.crop((near_tip,0,near_tip+1,rails.height)).getextrema()[1],0)
             beyond=min(rails.width-1,face_tip+side)
             self.assertEqual(rails.crop((beyond,0,beyond+1,rails.height)).getextrema(),(0,0))
@@ -288,7 +293,9 @@ class InstrumentRefinementTests(unittest.TestCase):
     def test_both_dial_drs_crops_reveal_and_sweep_reach_face_tip(self):
         from halo import drs_motion
         registry=json.loads((ROOT/'registry/hud.json').read_text())['hud.element']
-        expected=(geo.WING_FACE_END-geo.CX)*geo.HUD_SCALE
+        ends=geo.wing_edge_ends()
+        right_tip=max(ends[1,0],ends[1,1])*geo.HUD_SCALE
+        left_tip=max(ends[-1,0],ends[-1,1])*geo.HUD_SCALE
 
         def descendants(items):
             for item in items:
@@ -300,9 +307,9 @@ class InstrumentRefinementTests(unittest.TestCase):
                 record=registry[dial_name]
                 bounds={name:record['sprites'][name]['bounds']
                         for name in ('drs_left','drs_right')}
-                self.assertLessEqual(abs(bounds['drs_right'][2]-expected),
+                self.assertLessEqual(abs(bounds['drs_right'][2]-right_tip),
                                      geo.HUD_SCALE+1e-4)
-                self.assertLessEqual(abs(bounds['drs_left'][0]+expected),
+                self.assertLessEqual(abs(bounds['drs_left'][0]+left_tip),
                                      geo.HUD_SCALE+1e-4)
                 group=next(item for item in descendants(record['elements'])
                            if item.get('id')=='drs_open')
@@ -311,13 +318,13 @@ class InstrumentRefinementTests(unittest.TestCase):
                 right_half=right['window'][0]/2
                 self.assertAlmostEqual(right['path'][0][0]+right_half,
                                        bounds['drs_right'][0],places=5)
-                self.assertLessEqual(abs(right['path'][1][0]+right_half-expected),
+                self.assertLessEqual(abs(right['path'][1][0]+right_half-right_tip),
                                      geo.HUD_SCALE+1e-4)
                 left=elements['drs_left']
                 left_half=left['window'][0]/2
                 self.assertAlmostEqual(left['path'][0][0]-left_half,
                                        bounds['drs_left'][2],places=5)
-                self.assertLessEqual(abs(left['path'][1][0]-left_half+expected),
+                self.assertLessEqual(abs(left['path'][1][0]-left_half+left_tip),
                                      geo.HUD_SCALE+1e-4)
                 for side,sign in (('right',1),('left',-1)):
                     sweep=elements['drs_sweep_'+side]

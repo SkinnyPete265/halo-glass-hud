@@ -240,7 +240,7 @@ def text(image,x,y,value,size,color=WHITE+(255,),rotation=0.,width_scale=1.,
 
 
 def wing_texture_frame(image, padding=None, top_padding=None):
-    """Pad a HUD texture and append the approved outside wing-edge tails."""
+    """Pad the base for stable texture coordinates."""
     from . import layout as geo
 
     padding = geo.WING_TEXTURE_PADDING if padding is None else padding
@@ -250,14 +250,6 @@ def wing_texture_frame(image, padding=None, top_padding=None):
     frame_height = HEIGHT + top_padding
     frame = Image.new('RGBA', (frame_width * S, round(frame_height * S)))
     frame.alpha_composite(image, (padding * S, 0))
-    edge_tail = wing_edge_effects(
-        padding=padding,
-        draw_from=geo.WING_TEXTURE_NATIVE_END_DISTANCE,
-        draw_to=geo.WING_TEXTURE_END - CX,
-        context_split=geo.WING_TEXTURE_NATIVE_END_DISTANCE,
-        top_padding=top_padding,
-    )
-    frame.alpha_composite(edge_tail)
     return frame
 
 
@@ -647,10 +639,7 @@ def glass_wings(variant=None):
             image, path, ((top_run, True), (bottom_run, False)),
             CYAN+(168,), .8, 2.0, variant,
         )
-    return Image.alpha_composite(wing_edge_effects(
-        variant=variant,
-        context_split=geo.WING_TEXTURE_NATIVE_END_DISTANCE,
-    ), image)
+    return image
 
 
 def _smooth(value):

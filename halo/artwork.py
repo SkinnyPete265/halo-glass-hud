@@ -53,7 +53,7 @@ def shoulder_glass():
             reflection = math.exp(-((y-upper-24.)/20.)**2)
             lower_light = math.exp(-((lower-y-27.)/22.)**2)
             light = reflection + .38*lower_light + .48*root_light*math.exp(-((y-upper-40.)/23.)**2)
-            alpha = round(192*edge*density*rim)
+            alpha = round(1.07*192*edge*density*rim)
             pixels[xx,yy] = (round(42+95*light),round(55+94*light),
                              round(82+83*light),alpha)
     return image
@@ -205,7 +205,7 @@ def base(race_variant=None):
 
 
 def texture_base(race_variant=None):
-    """Include the full outside-edge tails in the texture used by the game."""
+    """Return the padded base used by the game."""
     return mat.wing_texture_frame(base(race_variant), geo.WING_TEXTURE_PADDING)
 
 

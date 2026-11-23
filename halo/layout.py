@@ -188,7 +188,7 @@ def circle_readouts(season26):
     return (
         ('kph_unit', KPH, 'KM/H'),
         ('mph', Text(CX, CY + 37., SPEED.size * .77), None),
-        ('mph_unit', Text(CX, CY + 55., 14.), 'MPH'),
+        ('mph_unit', Text(CX, CY + 56., 14.), 'MPH'),
     )
 
 
@@ -254,11 +254,15 @@ def wing_face_bounds(x):
 
 
 def drs_rail_points(edge, side=1):
+    upper = edge == 'top'
+    end = wing_edge_ends()[side, 0 if upper else 1]
+    start = DRS_RAIL_START-CX
+    depth = 3. if upper else WING_FACE_BOTTOM-WING_FACE_TOP-3.
+    steps = math.ceil(end-start)
     points = []
-    for x in range(round(DRS_RAIL_START), round(DRS_RAIL_END) + 1):
-        x = CX + side*(x-CX)
-        upper, lower = wing_backing_bounds(x)
-        points.append((x, upper + 5.0 if edge == 'top' else lower - 5.0))
+    for i in range(steps+1):
+        x = CX + side*(start+(end-start)*i/steps)
+        points.append((x, wing_surface_y(x, depth)))
     return points
 
 

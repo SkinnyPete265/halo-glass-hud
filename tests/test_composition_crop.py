@@ -67,8 +67,6 @@ class CompositionCropTests(unittest.TestCase):
                         (3728, 1984 + round(layout.ARTWORK_TOP_PADDING
                                            * layout.BASE_TEXTURE_RESOLUTION)),
                     )
-                else:
-                    self.assertNotEqual(crop, STABLE_BASE_CROP)
 
                 # Confirm the crop plus sprite origin leaves the hub and both
                 # full tail anchors at their authored HUD-space coordinates.
@@ -105,15 +103,12 @@ class CompositionCropTests(unittest.TestCase):
                 ])[1]
                 self.assertLessEqual(parent_top, sprite_top)
 
-                # The last five artwork pixels of each extended tail still
-                # contain alpha before the authored fade reaches its endpoint.
-                for (side, edge), distance in layout.wing_edge_ends(exterior=True).items():
-                    x = layout.CX + side*(distance-5.)
-                    sample_x = round((x + layout.WING_TEXTURE_PADDING)
-                                     * layout.BASE_TEXTURE_RESOLUTION)
-                    x0, x1 = max(left, sample_x - 2), min(right, sample_x + 3)
-                    tail = prepared.crop((x0, top, x1, bottom)).getchannel('A')
-                    self.assertGreater(tail.getextrema()[1], 0)
+                # Beyond the backing tip only transparent padding is allowed.
+                for side in (-1,1):
+                    x = layout.CX + side*(layout.WING_EFFECT_END-layout.CX+2.)
+                    px = round((x+layout.WING_TEXTURE_PADDING)*layout.BASE_TEXTURE_RESOLUTION)
+                    outside = (0,0,px,source.height) if side<0 else (px,0,source.width,source.height)
+                    self.assertIsNone(alpha.crop(outside).getbbox())
 
                 results.append((extension, crop, actual, prepared.size))
         finally:

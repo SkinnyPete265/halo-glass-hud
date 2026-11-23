@@ -77,15 +77,20 @@ def fill_edge_mask(window_width, feather, width=512, height=8):
 @lru_cache(maxsize=1)
 def drs_clip_mask():
     """Fade the rail core and halo together at the outer wing-face tips."""
-    row=Image.new('L',(geo.WIDTH*S,1))
-    values=[]
-    for xx in range(row.width):
-        x=geo.CX+abs((xx+.5)/S-geo.CX)
-        fade=mat._smooth((x-geo.DRS_RAIL_START)/1.25)
-        fade*=mat._smooth((geo.WING_FACE_END-x)/32.)
-        values.append(round(255*fade))
-    row.putdata(values)
-    return row.resize((geo.WIDTH*S,geo.HEIGHT*S),Image.Resampling.NEAREST)
+    mask = Image.new('L',(geo.WIDTH*S,geo.HEIGHT*S))
+    draw = ImageDraw.Draw(mask)
+    ends = geo.wing_edge_ends()
+    for xx in range(mask.width):
+        x = (xx+.5)/S
+        side = -1 if x < geo.CX else 1
+        run = abs(x-geo.CX)
+        root = mat._smooth((run-(geo.DRS_RAIL_START-geo.CX))/1.25)
+        middle = round((geo.top(x)+geo.WING_CENTER_OFFSET)*S)
+        for k,(first,last) in enumerate(((0,middle-1),(middle,mask.height-1))):
+            fade = root*mat._smooth((ends[side,k]-run)/32.)
+            if fade:
+                draw.line((xx,first,xx,last), fill=round(255*fade))
+    return mask
 
 def clip_drs(image):
     image.putalpha(ImageChops.multiply(image.getchannel('A'),drs_clip_mask()))
