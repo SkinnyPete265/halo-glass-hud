@@ -1,6 +1,8 @@
 # Development notes
 
-Dedicated SWOFTY project for the stock 2025 F1 dial.
+Halo Glass HUD for the 2025 and 2026 dials. Use the [repository guide](REPOSITORY.md)
+for the current build and install workflow. Earlier release sections record the
+implementation and verification at the time.
 
 ## Test build 0.7.0
 
@@ -144,18 +146,9 @@ The new placement needs its first in-game test in v0.7.0.
 
 ## Installation and removal
 
-The addon ID is local.halo-hud-v2. Install dist/local.halo-hud-v2.swoftyaddon
-through SWOFTY, enable it in the default profile, and launch a stock 2025 F1 car.
-Keep the legacy local.halo-hud addon disabled to avoid overlapping UI edits.
-Disable local.halo-hud-v2 in SWOFTY to remove its changes on the next launch.
-
-Launcher and store paths are configurable through project.local.json and CLI options.
-
-```powershell
-& "C:/path/to/SwoftyLauncher/bin/swofty.exe" --data-dir "C:/path/to/Swofty" --profile default addons install dist/local.halo-hud-v2.swoftyaddon
-& "C:/path/to/SwoftyLauncher/bin/swofty.exe" --data-dir "C:/path/to/Swofty" --profile default addons enable local.halo-hud-v2
-& "C:/path/to/SwoftyLauncher/bin/swofty.exe" --data-dir "C:/path/to/Swofty" --profile default build --game 'C:/path/to/F1 25'
-```
+The addon ID is `local.halo-hud-v2`. Use the [release guide](REPOSITORY.md#build-package-and-install-step-by-step)
+to build, install and verify it in `Halo-HUD-Dev`. Disable it in SWOFTY to
+remove its changes from the next launch of that profile.
 
 ## Source and rebuild
 
@@ -210,7 +203,7 @@ publication. tools/verify_install.py performs the release installation checks.
 AGENTS.md holds the development workflow. Share PROJECT_STATE.md when starting a
 new chat. Use the game's HUD editor and gameplay for visual review.
 
-## Validation and remaining work
+## Historical validation through v0.7.0
 
 The user confirmed that v0.1.1 loads a session successfully and its RPM bar
 responds in game. The user confirmed that v0.2.0 DRS works in Time Trial.
@@ -247,10 +240,6 @@ The user approved v0.5.0 and v0.6.0 in game. Version 0.7.0 needs its first in-ga
 The general SWOFTY dev check warns that its optional Python SDK data validator
 is unavailable. Its native composer parsed the registry and generated the
 archives. Focused local validators check the prepared output separately.
-
-Left-wing battery text and per-lap limits remain future migration work.
-Native sector typography, alternative speed units, DLC cars, and session lifecycle
-transitions need further verification.
 
 ## Licences
 
@@ -292,7 +281,7 @@ three preview states pixel for pixel and all 236 prepared UI fragments against
 the v0.7.0 baseline. The existing native source and DLLs passed the rollback
 comparison. Release 0.8.0 requires its own in-game confirmation.
 
-## Pending DRS typography and battery fill refinement
+## DRS typography and battery fill after v0.8.0
 
 DRS OPEN uses a native text core with the HUD's OSD_24_bold style. Native distance
 and available captions receive the same type treatment with capped edge effects.

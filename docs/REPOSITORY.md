@@ -16,8 +16,9 @@ Fresh source clones require those local inputs before full composition.
 
 ## Optional local checks
 
-- `python -B tools/project.py status` shows the configured version, install
-  profile, local inputs and whether F1 25 is running.
+- `python -B tools/project.py status` shows the source and installed versions,
+  whether the target profile exists and has Halo enabled, local inputs and
+  whether F1 25 is running.
 - `python -B tools/project.py check` runs the project's source checks locally.
   The GitHub workflow runs these checks for you when you dispatch a build.
 
@@ -51,13 +52,14 @@ before using its archives. A full compose also logs `swofty hud check`.
    avoid file locks, and leave the release PC signed in. In GitHub, open
    **Actions → Local release → Run workflow**. Select `main`. If the approved
    commit is the latest on `main`, leave **commit** blank. Otherwise paste its
-   full 40-character SHA without angle brackets. Keep **mode** at `install`
+   full 40-character SHA from `main` history without angle brackets. Keep **mode** at `install`
    for a playable build, or choose `package` to create the file only. Click
    **Run workflow** once. The CLI equivalent for current `main` is
    `gh workflow run local-release.yml --ref main -f mode=install`.
 4. **Wait for the Windows result.** GitHub's green check means the request passed
-   source checks and is queued. Use `python -B tools/local_release.py status`
-   on the release PC and find the matching run ID. Wait for `cache_verified`
+   source checks and is queued. Use `python -B tools/local_release.py status RUN_ID`
+   on the release PC, replacing `RUN_ID` with the number at the end of the GitHub
+   run URL. Wait for `cache_verified`
    for install or `packaged` for package-only. The result gives the versioned
    `.swoftyaddon`, evidence directory and rollback location. Approved installs
    target `Halo-HUD-Dev` through `project.local.json`.
@@ -83,8 +85,10 @@ evidence path under `build/releases/`. For an install, look for
 
 ### If a build stops
 
-- **Changelog error.** Fix the version heading, run `tools/project.py notes`
-  through Python, then commit and push the fix before dispatching again.
+- **Changelog error.** Fix the version heading, run `python -B tools/project.py notes`,
+  then commit and push the fix before dispatching again.
+- **Profile missing.** Run `python -B tools/project.py status` and check the
+  SWOFTY store and profile in `project.local.json`.
 - **Files in use.** Close other SWOFTY windows and F1 25 normally. For a failed
   GitHub install, dispatch the same SHA again. For a manual install, repeat the
   same command. A worker waiting specifically for game closure resumes on its
@@ -209,7 +213,7 @@ reuse the previously validated native composition and package. Missing, changed 
 corrupted outputs trigger regeneration. Native source or registry changes invalidate
 composition reuse. Packaging still checks runtime freshness before accepting reuse.
 
-Installation compares the package against the complete installed addon tree and reads
+Installation compares the package against the installed addon payload and reads
 the selected profile. Matching files skip reinstallation, and an enabled addon skips
 the enable command. The release warns before building if Project Halo is also
 enabled in the profile. SWOFTY handles cache freshness for game/profile changes,
@@ -220,7 +224,8 @@ sprites referenced by either dial. Keep experiments and local scripts under
 build/ and add new distributable build tools to the list in tools/package.py.
 
 Each release attempt has a directory under build/releases/. Its release.json
-records the game and launcher identities, package hash, outcome and cache or
+records the source commit and tracked edit count, game and launcher identities,
+package hash, outcome and cache or
 rollback if available. The directory holds the logs, validation and timings,
 and the install report after verification. The top-level timing files remain
 available for inspecting the most recent run.
