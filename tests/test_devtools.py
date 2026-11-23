@@ -283,6 +283,9 @@ class DeveloperToolsTests(unittest.TestCase):
         self.enterContext(mock.patch.object(project, "build_environment_identity", return_value={
             "game": {"steam_build_id": "1"}, "launcher": {"path": "swofty"},
         }))
+        self.enterContext(mock.patch.object(project, "source_checkout", return_value={
+            "source_commit": "a" * 40, "tracked_edits": 0,
+        }))
         self.enterContext(mock.patch.object(
             project.subprocess, "check_output", return_value="swofty 1.10.21\n",
         ))
@@ -320,12 +323,21 @@ class DeveloperToolsTests(unittest.TestCase):
         self.stub_release_evidence()
         settings = {"data_dir": str(self.root / "store"), "profile": "missing"}
         args = SimpleNamespace(native=False, install=True)
-        with mock.patch.object(project, "ROOT", self.root), mock.patch.object(project, "prepare_release") as prepare:
+        diagnostics = io.StringIO()
+        with (
+            mock.patch.object(project, "ROOT", self.root),
+            mock.patch.object(project, "prepare_release") as prepare,
+            mock.patch.object(project, "source_checkout", return_value={
+                "source_commit": "a" * 40, "tracked_edits": 1,
+            }),
+            contextlib.redirect_stderr(diagnostics),
+        ):
             with self.assertRaisesRegex(ValueError, "CHANGELOG.md needs"):
                 project.release(settings, {"id": "test.hud", "version": "2"}, args)
             with self.assertRaisesRegex(ValueError, "profile 'missing' was not found"):
                 project.release(settings, {"id": "test.hud", "version": "1"}, args)
             prepare.assert_not_called()
+        self.assertIn("local tracked edits", diagnostics.getvalue())
 
 
 if __name__ == "__main__":

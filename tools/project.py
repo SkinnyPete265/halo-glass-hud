@@ -137,6 +137,10 @@ def release(settings, manifest, args, *, result_path=None):
     try:
         from package import read_changelog
 
+        if record['tracked_edits']:
+            print('Warning: this checkout has local tracked edits. Commit intended changes '
+                  'before relying on the recorded SHA to reproduce the build.',
+                  file=sys.stderr, flush=True)
         read_changelog(ROOT, manifest["version"])
         if args.install:
             profile = record["profile"]
