@@ -59,10 +59,14 @@ def release_notes(changelog, version):
     return matches[0]
 
 
+def read_changelog(root, version):
+    changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+    return changelog, release_notes(changelog, version)
+
+
 def package():
     source_manifest = json.loads((ROOT / "swofty.json").read_text(encoding="utf-8"))
-    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    release_notes(changelog, source_manifest["version"])
+    changelog, _ = read_changelog(ROOT, source_manifest["version"])
     validation = json.loads((ROOT / "runtime/validation.json").read_text())
     registry = (ROOT / "registry/hud.json").read_bytes()
     registry_hash = hashlib.sha256(registry).hexdigest()

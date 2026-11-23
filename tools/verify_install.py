@@ -20,6 +20,18 @@ def require(condition, detail):
         raise ValueError(detail)
 
 
+def verify_profile_change(before, after, addon):
+    original = next((item for item in before['addons'] if item['id'] == addon), None)
+    if original is None:
+        added = [item for item in after['addons'] if item['id'] == addon]
+        require(len(added) == 1 and added[0].get('enabled') is True,
+                'Addon was not added and enabled in the target profile')
+        after = {**after, 'addons': [item for item in after['addons'] if item['id'] != addon]}
+    else:
+        original['enabled'] = True
+    require(after == before, 'Profile settings changed')
+
+
 def main():
     settings = local_settings()
     parser = argparse.ArgumentParser()
@@ -56,6 +68,7 @@ def main():
         require(plans, 'No built cache was found for profile '+args.profile)
         cache = plans[0].parent
     plan = json.loads((cache/'plan.json').read_text())
+    require(plan.get('profile') == args.profile, ('Cache belongs to another profile', plan.get('profile')))
     operations = json.loads((ROOT/'runtime/overlays.json').read_text())['ops']
     verified = 0
     for operation in operations:
@@ -121,8 +134,7 @@ def main():
         snapshot = ROOT/'build'/f'profile-before-v{version}.json'
     before = json.loads(snapshot.read_text())
     after = json.loads((store/'profiles'/(args.profile+'.json')).read_text())
-    next(item for item in before['addons'] if item['id'] == addon)['enabled'] = True
-    require(after == before, 'Profile settings changed')
+    verify_profile_change(before, after, addon)
     runtime = erpw.Erp(ROOT/'runtime/hud_scene.erp')
     name = 'eaid://ui_package/art/osd/textures/hud/halo_v2_rpm_fill_mask.tif.image'
     resource = runtime.find(name)
@@ -139,7 +151,8 @@ def main():
     warnings = built.get('warnings',[])
     other = [warning for warning in warnings if '[catalogue]' not in warning]
     launcher = subprocess.check_output([str(args.launcher),'--version'],text=True).strip()
-    report = {'version':version,'launcher':launcher,'installed_files':len(files),'cache':str(cache),
+    report = {'version':version,'launcher':launcher,'profile':args.profile,
+              'installed_files':len(files),'cache':str(cache),
               'verified_resource_copies':verified,'native_loader_routes_verified':True,
               'native_loader_routes':["swofty/addons/"+addon+"/"+item['dll'] for item in manifest['operations']['native']],
               'stock_animated_material_library_verified':True,

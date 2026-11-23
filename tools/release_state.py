@@ -19,8 +19,26 @@ def read_json(path):
         return {}
 
 
+def source_checkout(root):
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True,
+        )
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=root, capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        return {"source_commit": None, "tracked_edits": None}
+    return {
+        "source_commit": commit.stdout.strip() if commit.returncode == 0 else None,
+        "tracked_edits": len(dirty.stdout.splitlines()) if dirty.returncode == 0 else None,
+    }
+
+
 def facts(root, settings):
     source = read_json(root / "swofty.json")
+    profile = settings.get("profile", "default")
     installed = {}
     if settings.get("data_dir") and source.get("id"):
         installed = read_json(
@@ -30,27 +48,19 @@ def facts(root, settings):
     report = (
         read_json(root / "build" / f"install-report-v{version}.json") if version else {}
     )
-    if report.get("version") != version:
+    report_profile = report.get("profile")
+    if not report_profile and report.get("cache"):
+        report_profile = Path(report["cache"]).parent.name
+    if report.get("version") != version or (report_profile and report_profile != profile):
         report = {}
     validation = read_json(root / "runtime/validation.json")
-    commit = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-    )
-    dirty = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=no"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-    )
+    checkout = source_checkout(root)
     return {
-        "tracked_edits": len(dirty.stdout.splitlines()),
+        **checkout,
         "source_version": source.get("version"),
         "installed_version": version,
-        "profile": settings.get("profile", "default"),
-        "commit": commit.stdout.strip() or "unavailable",
+        "profile": profile,
+        "commit": checkout["source_commit"][:7] if checkout["source_commit"] else "unavailable",
         "last_install_verification": report,
         "prepared_runtime": bool(validation),
         "report_path": f"build/install-report-v{version}.json" if report else None,
@@ -69,7 +79,8 @@ def update(root=ROOT, settings=None):
         "- Installed version " + str(value["installed_version"] or "unavailable"),
         "- SWOFTY profile " + value["profile"],
         "- Source commit " + value["commit"],
-        "- Pending tracked source edits " + str(value["tracked_edits"]),
+        "- Pending tracked source edits "
+        + (str(value["tracked_edits"]) if value["tracked_edits"] is not None else "unavailable"),
         "- Last recorded in-game status "
         + str(report.get("in_game_test", "unverified")),
     ]

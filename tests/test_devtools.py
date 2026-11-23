@@ -27,6 +27,7 @@ from halo import tuning
 from log_summary import save_summary, summarize
 from build_inputs import file_hash
 from release_state import update
+from verify_install import verify_profile_change
 
 
 class DeveloperToolsTests(unittest.TestCase):
@@ -173,7 +174,6 @@ class DeveloperToolsTests(unittest.TestCase):
     def test_release_retry_preserves_rollback_and_skips_matching_install(self):
         self.stub_release_evidence()
         store = self.root / "store"
-        (store / "profiles").mkdir(parents=True)
         (store / "profiles/default.json").write_text(
             '{"addons":[{"id":"test.hud","enabled":true},'
             '{"id":"nick.f1-2026-halo","enabled":true}]}'
@@ -264,7 +264,7 @@ class DeveloperToolsTests(unittest.TestCase):
         ) as backup:
             with self.assertRaisesRegex(RuntimeError, "Package ready"):
                 project.release(
-                    {},
+                    {"data_dir": str(self.root / "store")},
                     {"id": "test.hud", "version": "1"},
                     SimpleNamespace(native=False, install=True),
                 )
@@ -276,6 +276,10 @@ class DeveloperToolsTests(unittest.TestCase):
     def stub_release_evidence(self):
         (self.root / "dist").mkdir()
         (self.root / "dist/test.hud.swoftyaddon").write_bytes(b"test addon")
+        (self.root / "CHANGELOG.md").write_text("## 1\n\n- Test release\n", encoding="utf-8")
+        profiles = self.root / "store/profiles"
+        profiles.mkdir(parents=True)
+        (profiles / "default.json").write_text('{"addons":[]}', encoding="utf-8")
         self.enterContext(mock.patch.object(project, "build_environment_identity", return_value={
             "game": {"steam_build_id": "1"}, "launcher": {"path": "swofty"},
         }))
@@ -292,7 +296,7 @@ class DeveloperToolsTests(unittest.TestCase):
         (store / "addons/test.hud/swofty.json").write_text('{"version":"1.0"}')
         (self.root / "build").mkdir()
         (self.root / "build/install-report-v1.0.json").write_text(
-            '{"version":"1.0","in_game_test":"Pending"}'
+            '{"version":"1.0","profile":"default","in_game_test":"Pending"}'
         )
         first = update(self.root, {"data_dir": str(store)})
         update(self.root, {"data_dir": str(store)})
@@ -301,6 +305,27 @@ class DeveloperToolsTests(unittest.TestCase):
         self.assertEqual(result.count("BEGIN GENERATED RELEASE STATE"), 1)
         self.assertEqual(first["installed_version"], "1.0")
         self.assertEqual(first["source_version"], "2.0")
+        self.assertEqual(first["report_path"], "build/install-report-v1.0.json")
+        other = update(self.root, {"data_dir": str(store), "profile": "other"})
+        self.assertIsNone(other["report_path"])
+
+    def test_first_install_only_allows_the_new_enabled_addon(self):
+        before = {"addons": [{"id": "other", "enabled": False}], "options": {}}
+        after = {"addons": [*before["addons"], {"id": "test.hud", "enabled": True}], "options": {}}
+        verify_profile_change(before, after, "test.hud")
+        with self.assertRaisesRegex(ValueError, "Profile settings changed"):
+            verify_profile_change(before, {**after, "options": {"other": {}}}, "test.hud")
+
+    def test_bad_release_inputs_stop_before_composition(self):
+        self.stub_release_evidence()
+        settings = {"data_dir": str(self.root / "store"), "profile": "missing"}
+        args = SimpleNamespace(native=False, install=True)
+        with mock.patch.object(project, "ROOT", self.root), mock.patch.object(project, "prepare_release") as prepare:
+            with self.assertRaisesRegex(ValueError, "CHANGELOG.md needs"):
+                project.release(settings, {"id": "test.hud", "version": "2"}, args)
+            with self.assertRaisesRegex(ValueError, "profile 'missing' was not found"):
+                project.release(settings, {"id": "test.hud", "version": "1"}, args)
+            prepare.assert_not_called()
 
 
 if __name__ == "__main__":

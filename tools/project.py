@@ -13,7 +13,7 @@ import zipfile
 from build_inputs import file_hash
 from compatibility import build_environment_identity
 from log_summary import save_summary
-from release_state import read_json, update as update_state
+from release_state import read_json, source_checkout, update as update_state
 from project_config import local_settings, launcher_command
 from stage_timing import Timings
 
@@ -129,15 +129,21 @@ def release(settings, manifest, args, *, result_path=None):
     folder = Path(tempfile.mkdtemp(prefix="v" + manifest["version"] + "-", dir=runs))
     timings = Timings(folder / "release-timings.json")
     record = {
+        **source_checkout(ROOT),
         "version": manifest["version"],
         "profile": settings.get("profile", "default"),
         "status": "failed",
     }
     try:
-        if args.install and settings.get("data_dir"):
+        from package import read_changelog
+
+        read_changelog(ROOT, manifest["version"])
+        if args.install:
             profile = record["profile"]
             profile_file = Path(settings["data_dir"]) / "profiles" / f"{profile}.json"
-            if profile_file.is_file() and profile_enabled(profile_file, "nick.f1-2026-halo"):
+            if not profile_file.is_file():
+                raise ValueError(f"SWOFTY profile {profile!r} was not found at {profile_file}")
+            if profile_enabled(profile_file, "nick.f1-2026-halo"):
                 warning = (
                     f"Project Halo (nick.f1-2026-halo) is enabled in profile {profile!r} "
                     "and can override Halo Glass dial resources. Disable it in SWOFTY "
@@ -311,11 +317,11 @@ def main():
         print(json.dumps(update_state(), indent=2))
         return
     if args.action == "notes":
-        from package import release_notes
+        from package import read_changelog
 
         manifest = read_json(ROOT / "swofty.json")
-        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-        print(release_notes(changelog, manifest["version"]))
+        _, notes = read_changelog(ROOT, manifest["version"])
+        print(notes)
         return
     if args.action == "logs":
         if args.path is None:
@@ -328,6 +334,11 @@ def main():
     if args.action == "status":
         settings = local_settings()
         manifest = json.loads((ROOT / "swofty.json").read_text(encoding="utf-8"))
+        store = Path(settings["data_dir"]) if settings.get("data_dir") else None
+        profile = settings.get("profile")
+        profile_file = store / "profiles" / f"{profile}.json" if store and profile else None
+        has_profile = profile_file is not None and profile_file.is_file()
+        installed = read_json(store / "addons" / manifest["id"] / "swofty.json") if store else {}
         inputs = [
             "native/reference/native-controls.erpk",
             "native/reference/drs-template.bin",
@@ -337,7 +348,10 @@ def main():
                 {
                     "root": str(ROOT),
                     "version": manifest["version"],
-                    "profile": settings.get("profile", "default"),
+                    "installed_version": installed.get("version"),
+                    "profile": profile,
+                    "profile_exists": has_profile,
+                    "enabled_in_profile": profile_enabled(profile_file, manifest["id"]) if has_profile else None,
                     "local_configuration": (ROOT / "project.local.json").exists(),
                     "native_inputs": {name: (ROOT / name).exists() for name in inputs},
                     "game_running": game_running(),
@@ -363,9 +377,9 @@ def main():
         return
     settings = local_settings()
     manifest = json.loads((ROOT / "swofty.json").read_text(encoding="utf-8"))
-    required = ("launcher", "data_dir", "game")
+    required = ("launcher", "data_dir", "game", "profile")
     if args.install and any(not settings.get(key) for key in required):
-        parser.error("Configure launcher, data_dir and game in project.local.json")
+        parser.error("Configure launcher, data_dir, game and profile in project.local.json")
     (ROOT / "build").mkdir(exist_ok=True)
     release(settings, manifest, args, result_path=args.result)
 
