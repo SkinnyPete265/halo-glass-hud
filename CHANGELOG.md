@@ -6,7 +6,15 @@ Development and beta builds use the same versioned notes intended for future rel
 
 ### New/Added
 
-- Test
+- Added dedicated Boost and Overtake bands to the F1 26 dial.
+- Kept deployment and recovery kW on F1 26 and gave F1 25 a larger energy-flow label.
+
+### Fixes
+
+- Separated the two speeds, enlarged MPH, and moved the battery to the lower dial rim.
+- Enlarged the battery and restored its glowing border and rounded fill at full charge.
+- Stabilized the energy-flow label through short shift transients.
+- Smoothed lit stepped pedal edges while keeping the gaps between slats.
 
 ## 0.16.0-dev1
 
