@@ -19,13 +19,7 @@ Fresh source clones require those local inputs before full composition.
 ```powershell
 python -B tools/project.py status
 python -B tools/project.py check
-python -B tools/project.py release
-python -B tools/project.py release --install
 ```
-
-Add --native to release when rebuilding the native publishers. Release logs
-stay under build/releases/ and new rollback packages under
-local/archive/rollbacks/. In-game testing remains a separate verification.
 
 GitHub Actions runs the Python checks and native fixtures in separate Windows jobs.
 The native job pins Zig 0.17.0 and uses the vendored SDK. Run the same fixtures
@@ -40,28 +34,65 @@ from the 1.10.21 source revision. Later runs reuse build/sdk-validation/.
 Composition checks SWOFTY's active stock game against project.local.json
 before using its archives. A full compose also logs `swofty hud check`.
 
-## Approved builds from GitHub
+## Build, package and install step by step
 
-Develop and commit on `dev/hud-dev`. Keep `main` as the rollback point for
-the last successful release checkpoint. Use a PR from `dev/hud-dev` into
-`main` when a release checkpoint is ready.
+1. **Start on `main`.** This is the only working branch. From the repo in
+   PowerShell, run `git status --short --branch` and sync with
+   `git pull --ff-only` when ready. A versioned package and its recorded commit
+   are the rollback checkpoint.
+2. **Set the version.** In `swofty.json`, set the version to build. Add a
+   nonempty `##` section for the exact same version in `CHANGELOG.md`. Run
+   `python -B tools/project.py notes` to see the entry that will be packaged.
+   Commit the version and changelog together and push `main`. You can record
+   the commit with `git rev-parse HEAD`. A Git tag can be added after verification.
+3. **Dispatch one build.** Close F1 25 and other SWOFTY Launcher windows to
+   avoid file locks, and leave the release PC signed in. In GitHub, open
+   **Actions → Local release → Run workflow**. Select `main`. If the approved
+   commit is the latest on `main`, leave **commit** blank. Otherwise paste its
+   full 40-character SHA without angle brackets. Keep **mode** at `install`
+   for a playable build, or choose `package` to create the file only. Click
+   **Run workflow** once. The CLI equivalent for current `main` is
+   `gh workflow run local-release.yml --ref main -f mode=install`.
+4. **Wait for the Windows result.** GitHub's green check means the request passed
+   source checks and is queued. Use `python -B tools/local_release.py status`
+   on the release PC and find the matching run ID. Wait for `cache_verified`
+   for install or `packaged` for package-only. The result gives the versioned
+   `.swoftyaddon`, evidence directory and rollback location. Approved installs
+   target `Halo-HUD-Dev` through `project.local.json`.
+5. **Test manually.** After `cache_verified`, open SWOFTY, select `Halo-HUD-Dev`
+   and launch F1 25. Use the candidate's gameplay checklist. Keep packages local
+   until public distribution is approved.
 
-Source checks run on pushes and pull requests. The separate **Local release**
-workflow runs only when the owner dispatches it from `main`. Push the reviewed
-candidate to `dev/hud-dev`, then dispatch its full commit SHA after approval
-in chat or from the Actions tab. The Python and native checks run against
-that SHA before the Windows worker accepts the request.
+### Build on the PC without GitHub
 
-```powershell
-gh workflow run local-release.yml --ref main -f commit=<approved-sha> -f mode=install
-```
+Use this route from the approved checkout when GitHub or the worker is
+unavailable. Check the version with `python -B tools/project.py notes`, then
+run one command in PowerShell:
 
-Use `install` for every approved test build or release checkpoint. It creates
-the local package, installs it in SWOFTY and verifies the exact cache. Choose
-`package` for an explicit package-only request. Routine source checks never
-queue a local build.
-The hosted run confirms the request is ready. The local worker reports the
-package and exact-cache results. The owner starts F1 25 when ready to test.
+| Goal | Command |
+| --- | --- |
+| Package and install | `python -B tools/project.py release --install --native` |
+| Package only | `python -B tools/project.py release --native` |
+
+`--native` rebuilds and tests the DLLs. Omit it only when the required DLLs
+are already built and verified for the candidate. The helper prints the release
+evidence path under `build/releases/`. For an install, look for
+`installation verification passed`. Run local and GitHub installs one at a time.
+
+### If a build stops
+
+- **Changelog error.** Fix the version heading, run `tools/project.py notes`
+  through Python, then commit and push the fix before dispatching again.
+- **Files in use.** Close other SWOFTY windows and F1 25 normally. For a failed
+  GitHub install, dispatch the same SHA again. For a manual install, repeat the
+  same command. A worker waiting specifically for game closure resumes on its
+  own. Keep the same version for a retry of the same candidate.
+- **Green on GitHub, no install yet.** Check the matching job record and worker
+  log at `local/release-worker/jobs/<run-id>/release.log`. A scheduled poll can
+  take about three minutes. `python -B tools/local_release.py poll` starts the
+  same worker immediately on the release PC.
+
+### Windows worker setup
 
 On the Windows release PC, check the local setup above and register the worker
 once from the development checkout:

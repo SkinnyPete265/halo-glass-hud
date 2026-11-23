@@ -43,19 +43,17 @@ paths come from the ignored `project.local.json`.
 
 ## Git history
 
-- Do all development on the shared `dev/hud-dev` branch. Keep `main` as the
-  rollback point for the last successful release checkpoint. Commit each
-  meaningful change once its focused checks pass,
+- Do all development and release preparation on `main`. Use versioned packages
+  and their recorded commits as release checkpoints. Commit each meaningful
+  change once its focused checks pass,
   even when several changes belong to one candidate. Use a short, descriptive
   commit message, such as “Smooth active brake and throttle slats.”
 - For longer experiments, make a clearly labelled checkpoint when it gives us
   a useful rollback point. Leave unrelated working-tree edits out of the commit.
-- Build test candidates from their exact approved SHA on `dev/hud-dev` and
-  record the owner's in-game result against it. Open a PR from `dev/hud-dev`
-  into `main` only when a release checkpoint is ready. Summarize the changes
-  and verification in that PR. Add a `Commits` section with one bullet for each
-  commit the PR introduces to `main`. Include its short SHA and a brief
-  description of what changed. Preserve meaningful commits when merging.
+- Build test candidates from their exact approved SHA on `main` and record the
+  owner's in-game result against it. In release reviews, include a `Commits`
+  section with one bullet per included commit, its short SHA and a brief
+  description of what changed.
 - Use the changelog to summarize each version. After in-game approval, track the
   version and changelog in a separate release metadata commit. When publishing,
   tag the exact commit that produced the verified package.
