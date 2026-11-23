@@ -38,9 +38,7 @@ def _surface_for_geometry(inner_x, outer_x, width, height):
     image = art.canvas()
     for edge in geo.DRS_RAIL_EDGES:
         for side in (-1,1):
-            points=geo.drs_rail_points(edge)
-            if side < 0:
-                points = [(2*geo.CX-x,y) for x,y in points]
+            points=geo.drs_rail_points(edge,side)
             image = mat.rounded_stroke(image,points,(40,245,139,225),9.0,10.0)
             image = mat.rounded_stroke(image,points,(118,255,185,245),6.0,3.0)
             image = mat.rounded_stroke(image,points,(230,255,242,255),2.2)

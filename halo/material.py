@@ -5,8 +5,8 @@ from pathlib import Path
 from functools import lru_cache
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 from .layout import (
-    WIDTH, HEIGHT, CX, CY, RADIUS, angle, arc_length, slat_points, point,
-    WING_FACE_TOP, WING_FACE_BOTTOM, PEDAL_INNER_RADIUS, PEDAL_OUTER_RADIUS,
+    WIDTH, HEIGHT, CX, CY, arc_length, slat_points,
+    PEDAL_INNER_RADIUS, PEDAL_OUTER_RADIUS,
     WING_FACE_START, WING_FACE_END, WING_EFFECT_END, WING_CORNER_RADIUS,
 )
 from . import layout as geo
@@ -17,12 +17,11 @@ FONT = str(Path(__file__).resolve().parents[1] / "assets/fonts/Saira/Saira.ttf")
 
 def sync_layout():
     """Refresh copied geometry constants after tuning values change in-process."""
-    global WIDTH, HEIGHT, CX, CY, RADIUS, WING_FACE_TOP
-    global WING_FACE_BOTTOM, PEDAL_INNER_RADIUS, PEDAL_OUTER_RADIUS
+    global WIDTH, HEIGHT, CX, CY
+    global PEDAL_INNER_RADIUS, PEDAL_OUTER_RADIUS
     global WING_FACE_START, WING_FACE_END, WING_EFFECT_END, WING_CORNER_RADIUS
     WIDTH, HEIGHT = geo.WIDTH, geo.HEIGHT
-    CX, CY, RADIUS = geo.CX, geo.CY, geo.RADIUS
-    WING_FACE_TOP, WING_FACE_BOTTOM = geo.WING_FACE_TOP, geo.WING_FACE_BOTTOM
+    CX, CY = geo.CX, geo.CY
     PEDAL_INNER_RADIUS, PEDAL_OUTER_RADIUS = geo.PEDAL_INNER_RADIUS, geo.PEDAL_OUTER_RADIUS
     WING_FACE_START, WING_FACE_END = geo.WING_FACE_START, geo.WING_FACE_END
     WING_EFFECT_END, WING_CORNER_RADIUS = geo.WING_EFFECT_END, geo.WING_CORNER_RADIUS
@@ -554,7 +553,7 @@ def glass_wings(variant=None):
         bounds_at=geo.wing_backing_bounds
         first,last,top_min,top_max,bottom_min,bottom_max = _subpixel_boundary_span(xx,bounds_at)
         first=max(0,first);last=min(image.height-1,last)
-        fade=min(1.,max(0.,min(x-75,WING_EFFECT_END-x)/48.))
+        fade=min(1.,max(0.,(WING_EFFECT_END-CX-abs(x-CX))/48.))
         for yy in range(first,last+1):
             coverage = _band_row_coverage(
                 xx, yy, bounds_at, top_min, top_max, bottom_min, bottom_max
@@ -568,12 +567,15 @@ def glass_wings(variant=None):
             material_alpha=round((WING_SMOKE_ALPHA+17*highlight+5*reflection+6*lower)*fade)
             alpha=round(material_alpha*coverage)
             pixels[xx,yy]=(round(28+45*highlight),round(49+64*highlight),round(59+67*highlight),alpha)
-    # Separate thin glass facets; matching mirrored base geometry.
+    # Fit each facet to its own traced outline.
     facet=Image.new('RGBA',image.size);facet_pixels=facet.load()
     for side in (-1,1):
+        def bounds_at(x):
+            return geo.wing_face_edges(CX+side*(x-CX))
+
         for xx in range(round(WING_FACE_START*S),round(WING_FACE_END*S)+1):
-            x=xx/S;y0,y1=geo.wing_face_edges(x)
-            bounds_at=geo.wing_face_edges
+            x=xx/S
+            y0,y1=bounds_at(x)
             x_direction = 1 if side > 0 else -1
             first,last,top_min,top_max,bottom_min,bottom_max = _subpixel_boundary_span(
                 xx,bounds_at,x_direction
@@ -621,17 +623,20 @@ def glass_wings(variant=None):
         # Rounded inner corner, open outer ends, stronger local edge next to
         # the information rather than outlining the entire backing.
         inner=WING_FACE_START;r=WING_CORNER_RADIUS;end=WING_FACE_END
-        face_top,face_bottom=WING_FACE_TOP,WING_FACE_BOTTOM
-        top_x = _samples(end, inner + r)
-        top_run=[(x,geo.wing_face_edges(x)[0]) for x in top_x]
+        def face_edges(x):
+            return geo.wing_face_edges(CX+side*(x-CX))
+
+        top_run=[(x,face_edges(x)[0]) for x in _samples(end, inner+r)]
         path=list(top_run)
-        path += [point(inner+r+r*math.cos(a),face_top+r+r*math.sin(a))
-                 for a in (-math.pi/2-math.pi*i/64 for i in range(33))]
-        path += [point(inner,face_bottom-r)]
-        path += [point(inner+r+r*math.cos(a),face_bottom-r+r*math.sin(a))
-                 for a in (math.pi-math.pi*i/64 for i in range(33))]
-        bottom_x = _samples(inner + r, end)
-        bottom_run=[(x,geo.wing_face_edges(x)[1]) for x in bottom_x]
+        for i in range(33):
+            a=-math.pi/2-math.pi*i/64
+            x=inner+r+r*math.cos(a)
+            path.append((x,face_edges(x)[0]+r+r*math.sin(a)))
+        for i in range(33):
+            a=math.pi-math.pi*i/64
+            x=inner+r+r*math.cos(a)
+            path.append((x,face_edges(x)[1]-r+r*math.sin(a)))
+        bottom_run=[(x,face_edges(x)[1]) for x in _samples(inner+r,end)]
         path += bottom_run[1:]
         if side<0:
             path=[(2*CX-x,y) for x,y in path]
@@ -815,25 +820,12 @@ def wing_edge_effects(padding=0, draw_from=None, draw_to=None, variant=None,
     # Then carry its fade and both backing edges continuously beyond the wing.
     fade_start = WING_EFFECT_END - 42.
     extension_start = WING_EFFECT_END - CX
-    tip_x = CX + extension_start
-    tip_upper, tip_lower = geo.wing_backing_bounds(tip_x)
-    tip_centre = (tip_upper + tip_lower) / 2
-    tip_half_height = (tip_lower - tip_upper) / 2
-    tip_curve_height = math.sqrt(max(1., RADIUS ** 2 - extension_start ** 2))
-    extension_span = max(1., texture_end - extension_start)
-
-    def bounds(distance):
-        if distance <= extension_start:
-            return geo.wing_backing_bounds(CX + distance)
-        progress = _smooth((distance - extension_start) / extension_span)
-        natural_height = math.sqrt(max(1., RADIUS ** 2 - distance ** 2)) / tip_curve_height
-        half_height = tip_half_height * (1. + (natural_height - 1.) * progress)
-        centre = tip_centre + geo.top(CX + distance) - geo.top(tip_x)
-        return centre - half_height, centre + half_height
-
     profiles = _wing_edge_profiles(style)
     context_columns = set()
-    for side in (-1, 1):
+    for side in (-1,1):
+        def bounds(distance):
+            return geo.wing_backing_bounds(CX + side*distance)
+
         if side > 0:
             first_x = padding + CX + sample_from
             last_x = padding + CX + sample_to

@@ -97,9 +97,7 @@ def drs_rails():
     image=art.canvas()
     for edge in geo.DRS_RAIL_EDGES:
         for side in (-1,1):
-            points=geo.drs_rail_points(edge)
-            if side<0:
-                points=[(2*geo.CX-x,y) for x,y in points]
+            points=geo.drs_rail_points(edge,side)
             image=mat.rounded_stroke(image,points,(48,211,132,145),4.2,7.0)
             image=mat.rounded_stroke(image,points,(67,249,160,220),4.2,2.1)
             image=mat.rounded_stroke(image,points,(144,255,199,235),1.1)

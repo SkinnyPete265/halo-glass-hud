@@ -1,4 +1,5 @@
 """Verify the stable texture crop and supported wing-extension expansion."""
+import math
 import sys
 import unittest
 
@@ -11,6 +12,22 @@ from halo.tuning import values
 
 
 class CompositionCropTests(unittest.TestCase):
+    def test_face_and_backing_keep_their_normal_width_through_the_tail(self):
+        for side in (-1, 1):
+            for distance in (175, 300, 420, 480, 540, 610):
+                x = layout.CX + side * distance
+                angle = math.radians(layout.angle(x))
+                y = layout.top(x) + layout.WING_CENTER_OFFSET
+                for edges, offsets in (
+                    (layout.wing_face_edges, (layout.WING_FACE_TOP, layout.WING_FACE_BOTTOM)),
+                    (layout.wing_backing_bounds, (0., layout.WING_HEIGHT)),
+                ):
+                    for index, offset in enumerate(offsets):
+                        normal = offset - layout.WING_CENTER_OFFSET
+                        edge_x = x - normal * math.sin(angle)
+                        edge_y = y + normal * math.cos(angle)
+                        self.assertAlmostEqual(edges(edge_x)[index], edge_y, places=6)
+
     def test_60px_stays_stable_and_75px_expands_without_clipping(self):
         original = values()
         results = []
@@ -40,7 +57,7 @@ class CompositionCropTests(unittest.TestCase):
                     self.assertEqual(crop, STABLE_BASE_CROP)
                     self.assertEqual(
                         (right - left, bottom - top),
-                        (3728, 1920 + round(layout.ARTWORK_TOP_PADDING
+                        (3728, 2168 + round(layout.ARTWORK_TOP_PADDING
                                            * layout.BASE_TEXTURE_RESOLUTION)),
                     )
                 else:

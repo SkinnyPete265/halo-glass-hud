@@ -25,14 +25,15 @@ def shoulder_glass():
     fade_length = .25 * (geo.WING_FACE_END - geo.WING_FACE_START)
     reach = root + fade_length
     top = geo.WHITE_ARC_TOP
-    image = Image.new('RGBA',(geo.WIDTH*S,math.ceil((geo.wing_backing_bounds(geo.CX+reach)[1]+2-top)*S)))
+    bottom = max(geo.wing_backing_bounds(geo.CX+side*reach)[1] for side in (-1,1))
+    image = Image.new('RGBA',(geo.WIDTH*S,math.ceil((bottom+2-top)*S)))
     pixels = image.load()
     for xx in range(round((geo.CX-reach)*S),round((geo.CX+reach)*S)):
         dx = abs((xx+.5)/S-geo.CX)
         curve = math.hypot(dx,95.)-95.
         # Blend the dial surround into the actual wing backing at each root.
         wing = mat._smooth((dx-65.)/110.)
-        wing_top, wing_bottom = geo.wing_backing_bounds(geo.CX+dx)
+        wing_top, wing_bottom = geo.wing_backing_bounds((xx+.5)/S)
         upper = (1.-wing)*(-30. + .62*curve) + wing*wing_top
         lower = (1.-wing)*(202. + .18*curve) + wing*wing_bottom
         end = 1.-mat._smooth((dx-root)/fade_length)

@@ -13,13 +13,13 @@ CX, CY = 582.0, 95.0
 ARTWORK_TOP_PADDING = 24.0
 WHITE_ARC_CROWN = CY - 1.5 * 89.
 WHITE_ARC_TOP = math.floor(WHITE_ARC_CROWN) - 4
-# Circular fit to the mean of the two visible wing faces in the reference,
-# normalized to the 178-pixel instrument disc.
-RADIUS = 655.0
-
-
-def top(x):
-    return 37.0 + RADIUS - math.sqrt(RADIUS ** 2 - (x - CX) ** 2)
+# Upper panel radii traced separately from the cockpit reference, in art pixels.
+LEFT_FACE_RADIUS = 541.0
+RIGHT_FACE_RADIUS = 925.0
+# Continue the offset curves along their common tangent past the visible trace.
+WING_TANGENT_LIMIT = math.radians(55.)
+WING_LIMIT_SIN = math.sin(WING_TANGENT_LIMIT)
+WING_LIMIT_COS = math.cos(WING_TANGENT_LIMIT)
 
 
 # Treat the previously approved 110% size as the new 100% baseline.
@@ -27,13 +27,12 @@ HUD_SIZE_BASE_FACTOR = 1.10
 HUD_SIZE_FACTOR = HUD_SIZE_BASE_FACTOR * STYLE['hud_size'] / 100.0
 # Restore the v0.31.0 effective scale: 0.0065 * 1.485 / 0.018.
 HUD_SCALE = 0.53625 * HUD_SIZE_FACTOR
-BASE_WING_HEIGHT = 122.0 * 1.15
-WING_HEIGHT = BASE_WING_HEIGHT
-WING_CENTER_OFFSET = BASE_WING_HEIGHT / 2
+WING_HEIGHT = 117.0
+WING_CENTER_OFFSET = WING_HEIGHT / 2
 WING_FACE_TOP = 10.0
 WING_FACE_BOTTOM = WING_HEIGHT - 9.0
 WING_FACE_CENTER_OFFSET = (WING_FACE_TOP + WING_FACE_BOTTOM) / 2
-MAX_WING_TIP_HEIGHT_INCREASE = 10.0
+
 WING_FACE_START = 745.0
 BASE_WING_FACE_END = 1068.0
 WING_FACE_END = BASE_WING_FACE_END + STYLE['wing_extension']
@@ -46,43 +45,43 @@ WING_TEXTURE_PADDING = max(0, math.ceil(WING_TEXTURE_END - 2 * CX) + 6)
 WING_CORNER_RADIUS = 8.0
 
 
-def wing_cross_section_scale(x):
-    """Compensate for the arc narrowing the wing at its extended outer tip."""
+def face_radius(x):
+    return LEFT_FACE_RADIUS if x < CX else RIGHT_FACE_RADIUS
+
+
+def wing_surface_y(x, depth):
+    """Parallel curves at a normal distance from the upper instrument edge."""
+    outer = face_radius(x)
+    radius = outer - depth
     distance = abs(x - CX)
-    base_distance = BASE_WING_FACE_END - CX
-    if distance <= base_distance or STYLE['wing_extension'] <= 0:
-        return 1.0
-    distance = min(distance, WING_FACE_END - CX)
-    base_normal = math.sqrt(RADIUS ** 2 - base_distance ** 2) / RADIUS
-    current_normal = math.sqrt(RADIUS ** 2 - distance ** 2) / RADIUS
-    scale = base_normal / current_normal
-    # Preserve the band's original proportions without making the wing taller.
-    maximum = (BASE_WING_HEIGHT + MAX_WING_TIP_HEIGHT_INCREASE) / BASE_WING_HEIGHT
-    return min(scale, maximum)
+    # Join the two traced apex heights inside the central instrument.
+    crown = 49. + 6.*math.sin(max(-1., min(1., (x-CX)/80.))*math.pi/2)
+    join = radius * WING_LIMIT_SIN
+    if distance <= join:
+        return crown + outer - math.sqrt(radius * radius - distance * distance)
+    return crown + outer - radius * WING_LIMIT_COS + (distance-join) * math.tan(WING_TANGENT_LIMIT)
+
+
+def top(x):
+    # Existing instrument offsets are relative to the nominal wing top.
+    return wing_surface_y(x, WING_CENTER_OFFSET-WING_FACE_TOP) - WING_CENTER_OFFSET
 
 
 def wing_backing_bounds(x):
-    """Return the symmetrically widened outer wing bounds at this x position."""
-    scale = wing_cross_section_scale(x)
-    return (
-        top(x) + WING_CENTER_OFFSET - WING_HEIGHT / 2 * scale,
-        top(x) + WING_CENTER_OFFSET + WING_HEIGHT / 2 * scale,
-    )
+    return wing_surface_y(x, -WING_FACE_TOP), wing_surface_y(x, WING_HEIGHT-WING_FACE_TOP)
 
 
 def wing_face_edges(x):
-    """Return the face edges, widened around the original wing centreline."""
-    scale = wing_cross_section_scale(x)
-    half_height = (WING_FACE_BOTTOM - WING_FACE_TOP) / 2
-    return (
-        top(x) + WING_FACE_CENTER_OFFSET - half_height * scale,
-        top(x) + WING_FACE_CENTER_OFFSET + half_height * scale,
-    )
+    return wing_surface_y(x, 0.), wing_surface_y(x, WING_FACE_BOTTOM-WING_FACE_TOP)
+
+
+def tail_bottom():
+    return max(wing_backing_bounds(x)[1] for x in (2*CX-WING_TEXTURE_END, WING_TEXTURE_END))
 
 
 WING_TIP_TOP = wing_backing_bounds(WING_FACE_END)[0]
 WING_TIP_BOTTOM = wing_backing_bounds(WING_FACE_END)[1]
-HEIGHT = max(440, math.ceil(wing_backing_bounds(WING_TEXTURE_END)[1] + 6.0))
+HEIGHT = max(440, math.ceil(tail_bottom() + 6.0))
 DRS_RAIL_START = WING_FACE_START + WING_CORNER_RADIUS
 DRS_RAIL_END = WING_FACE_END
 DRS_RAIL_EDGES = ('top', 'bottom')
@@ -90,7 +89,7 @@ DRS_OPEN_CURVE = 'generic_fade_on_slow'
 DRS_OPEN_DURATION = .30
 DRS_CLOSE_DURATION = .075
 DRS_CLOSE_CURVE = 'generic_fade_off_fast'
-HUD_BOX_BOTTOM = max(422.0, wing_backing_bounds(WING_TEXTURE_END)[1] + 2.0)
+HUD_BOX_BOTTOM = max(422.0, tail_bottom() + 2.0)
 BATTERY_CENTRE = (CX, STYLE['battery_y'])
 BATTERY_WIDTH, BATTERY_HEIGHT = STYLE['battery_width'], STYLE['battery_height']
 BATTERY_CORNER_RADIUS = BATTERY_HEIGHT * .16
@@ -190,7 +189,8 @@ def gears_caption():
     return Text(x, top(x) + STYLE['gears_y'], STYLE['gears_size'], angle(x))
 
 def angle(x):
-    return math.degrees(math.asin((x - CX) / RADIUS))
+    radius = face_radius(x) - (WING_CENTER_OFFSET-WING_FACE_TOP)
+    return math.copysign(math.degrees(math.asin(min(WING_LIMIT_SIN, abs(x-CX)/radius))), x-CX)
 
 def wing_content_x(x):
     """Keep wing-mounted content at the same relative position as each wing grows."""
@@ -216,22 +216,26 @@ def wing_face_bounds(x):
     return upper + corner, lower - corner
 
 
-def drs_rail_points(edge):
+def drs_rail_points(edge, side=1):
     points = []
     for x in range(round(DRS_RAIL_START), round(DRS_RAIL_END) + 1):
+        x = CX + side*(x-CX)
         upper, lower = wing_backing_bounds(x)
         points.append((x, upper + 5.0 if edge == 'top' else lower - 5.0))
     return points
 
 
 def arc_length(x):
-    return RADIUS * math.asin((x - CX) / RADIUS)
+    radius = face_radius(x) - (WING_CENTER_OFFSET-WING_FACE_TOP)
+    tail = max(0., abs(x-CX) - radius*WING_LIMIT_SIN)
+    return radius*math.radians(angle(x)) + math.copysign(tail/WING_LIMIT_COS, x-CX)
 
 def gear_position(gear):
     distance = arc_length(780.0) + (
         arc_length(1025.0) - arc_length(780.0)
     ) * (gear - 1) / 7
-    x = wing_content_x(CX + RADIUS * math.sin(distance / RADIUS))
+    radius = RIGHT_FACE_RADIUS - (WING_CENTER_OFFSET-WING_FACE_TOP)
+    x = wing_content_x(CX + radius * math.sin(distance / radius))
     return Text(x, top(x) + GEAR_ROW_OFFSET, GEAR_NUMBER_SIZE, angle(x) * 0.25)
 
 def rpm_position():
@@ -302,9 +306,9 @@ def refresh_style(style=None):
     WING_TEXTURE_NATIVE_END_DISTANCE = min(CX, WIDTH - CX) - 3.0
     WING_TEXTURE_PADDING = max(0, math.ceil(WING_TEXTURE_END - 2 * CX) + 6)
     WING_TIP_TOP, WING_TIP_BOTTOM = wing_backing_bounds(WING_FACE_END)
-    HEIGHT = max(440, math.ceil(wing_backing_bounds(WING_TEXTURE_END)[1] + 6.0))
+    HEIGHT = max(440, math.ceil(tail_bottom() + 6.0))
     DRS_RAIL_END = WING_FACE_END
-    HUD_BOX_BOTTOM = max(422.0, wing_backing_bounds(WING_TEXTURE_END)[1] + 2.0)
+    HUD_BOX_BOTTOM = max(422.0, tail_bottom() + 2.0)
     BATTERY_CENTRE = (CX, STYLE['battery_y'])
     BATTERY_WIDTH = STYLE['battery_width']
     BATTERY_HEIGHT = STYLE['battery_height']

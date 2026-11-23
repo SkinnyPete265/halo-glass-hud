@@ -66,7 +66,7 @@ def effects(part, colour):
 
 def surface_basis(x):
     """Project the local axes of the wing's cylindrical surface."""
-    depth = geo.RADIUS - math.sqrt(geo.RADIUS ** 2 - (x - geo.CX) ** 2)
+    depth = geo.top(x) - geo.top(geo.CX)
     distance = PROJECTION_DISTANCE + depth
     perspective = PROJECTION_DISTANCE / distance
     centre_y = geo.top(x) + geo.WING_CENTER_OFFSET
