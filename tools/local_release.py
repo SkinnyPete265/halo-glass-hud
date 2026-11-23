@@ -98,7 +98,7 @@ def prepare(checkout, job):
         )
     git(checkout, "fetch", "--no-tags", REMOTE, f"refs/heads/{BRANCH}")
     git(checkout, "merge-base", "--is-ancestor", job["workflow_commit"], "FETCH_HEAD")
-    git(checkout, "fetch", "--no-tags", REMOTE, job["commit"])
+    git(checkout, "merge-base", "--is-ancestor", job["commit"], "FETCH_HEAD")
     git(checkout, "switch", "--detach", job["commit"])
     changes = subprocess.check_output(
         ["git", "-C", str(checkout), "status", "--porcelain"], text=True, creationflags=NO_WINDOW,
@@ -148,6 +148,8 @@ def execute(home, job, state, status_path):
         status = release.get("status", "failed")
         if result.returncode and status != "waiting_for_game_close":
             status = "failed"
+        if status == "failed" and not release.get("error"):
+            release["error"] = f"Release did not complete. See {run_path / 'release.log'}"
         write(status_path, dict(job, status=status, updated=now(), release=release))
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         write(status_path, dict(job, status="failed", updated=now(), error=str(error)))
@@ -194,7 +196,10 @@ def poll(home):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("setup", "poll", "status"))
+    parser.add_argument("run_id", nargs="?", type=int, help="Show one GitHub run with status")
     args = parser.parse_args()
+    if args.run_id is not None and (args.action != "status" or args.run_id < 1):
+        parser.error("A positive run ID applies to status only")
     if args.action == "setup":
         for relative in INPUTS:
             if not (ROOT / relative).is_file():
@@ -207,6 +212,12 @@ def main():
     elif args.action == "poll":
         poll(HOME)
     else:
+        if args.run_id is not None:
+            path = HOME / "jobs" / f"{args.run_id}.json"
+            if not path.is_file():
+                parser.exit(1, f"No local result for run {args.run_id} yet. Check GitHub and the worker poll status.\n")
+            print(json.dumps(read(path), indent=2))
+            return
         paths = [HOME / "poll.json", *sorted((HOME / "jobs").glob("*.json"))]
         print(json.dumps([read(path) for path in paths if path.is_file()], indent=2))
 

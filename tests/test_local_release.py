@@ -49,6 +49,17 @@ class LocalReleaseTests(unittest.TestCase):
             with self.subTest(fields=fields):
                 self.assertIsNone(worker.enrolled_job(dispatch(**fields)))
 
+    @patch.object(worker, "git")
+    def test_worker_rejects_commit_outside_main_before_checkout(self, git):
+        checkout = self.home / "checkout"
+        (checkout / ".git").mkdir(parents=True)
+        job = worker.enrolled_job(dispatch())
+        git.side_effect = [None, None, subprocess.CalledProcessError(1, "merge-base")]
+        with self.assertRaises(subprocess.CalledProcessError):
+            worker.prepare(checkout, job)
+        self.assertEqual(git.call_args.args,
+                         (checkout, "merge-base", "--is-ancestor", job["commit"], "FETCH_HEAD"))
+
     @patch.object(worker, "execute")
     def test_source_gate_and_completed_job_deduplication(self, execute):
         worker.process(self.home, [dispatch(conclusion="failure")])
