@@ -21,7 +21,9 @@ def canvas(top_padding=0):
 
 def shoulder_glass():
     """Soft frost concentrated behind the inner wing instruments."""
-    reach = 430
+    root = geo.WING_FACE_START - geo.CX
+    fade_length = .25 * (geo.WING_FACE_END - geo.WING_FACE_START)
+    reach = root + fade_length
     top = geo.WHITE_ARC_TOP
     image = Image.new('RGBA',(geo.WIDTH*S,math.ceil((geo.wing_backing_bounds(geo.CX+reach)[1]+2-top)*S)))
     pixels = image.load()
@@ -33,11 +35,13 @@ def shoulder_glass():
         wing_top, wing_bottom = geo.wing_backing_bounds(geo.CX+dx)
         upper = (1.-wing)*(-30. + .62*curve) + wing*wing_top
         lower = (1.-wing)*(202. + .18*curve) + wing*wing_bottom
-        end = 1.-mat._smooth((dx-220.)/(reach-220.))
+        end = 1.-mat._smooth((dx-root)/fade_length)
         # Keep the soft surround near the dial, then let cockpit detail show
         # through where the separate instrument face overlaps this artwork.
         face = mat._smooth((dx-95.)/95.)
-        density = (.48+.52*wing)*(1.-.82*face)*end
+        density = (.48+.52*wing)*(1.-.58*face)*end
+        # A soft catch just inside the panel follows its upper curvature.
+        root_light = math.exp(-((dx-root-12.)/32.)**2)
         for yy in range(math.floor((upper-top)*S),math.ceil((lower-top)*S)):
             y = top+(yy+.5)/S
             rim = mat._smooth((math.hypot(dx,y-geo.CY)-89.)/6.)
@@ -45,7 +49,7 @@ def shoulder_glass():
             # A pale reflected strip blends into a denser blue-grey body.
             reflection = math.exp(-((y-upper-24.)/20.)**2)
             lower_light = math.exp(-((lower-y-27.)/22.)**2)
-            light = reflection + .38*lower_light
+            light = reflection + .38*lower_light + .48*root_light*math.exp(-((y-upper-40.)/23.)**2)
             alpha = round(192*edge*density*rim)
             pixels[xx,yy] = (round(42+95*light),round(55+94*light),
                              round(82+83*light),alpha)
