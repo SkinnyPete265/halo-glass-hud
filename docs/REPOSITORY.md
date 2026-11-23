@@ -14,12 +14,14 @@ Keep an existing local copy of those inputs. tools/extract_native_reference.py c
 capture them from the legacy addon and stock archive using its documented flags.
 Fresh source clones require those local inputs before full composition.
 
-## Commands
+## Optional local checks
 
-```powershell
-python -B tools/project.py status
-python -B tools/project.py check
-```
+- `python -B tools/project.py status` shows the configured version, install
+  profile, local inputs and whether F1 25 is running.
+- `python -B tools/project.py check` runs the project's source checks locally.
+  The GitHub workflow runs these checks for you when you dispatch a build.
+
+The release steps start at [Build, package and install step by step](#build-package-and-install-step-by-step).
 
 GitHub Actions runs the Python checks and native fixtures in separate Windows jobs.
 The native job pins Zig 0.17.0 and uses the vendored SDK. Run the same fixtures

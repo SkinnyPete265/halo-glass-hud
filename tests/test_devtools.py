@@ -181,6 +181,7 @@ class DeveloperToolsTests(unittest.TestCase):
         settings = {"data_dir": str(store), "launcher": "swofty", "game": "game"}
         commands = []
         verify_error = None
+        diagnostics = io.StringIO()
 
         def run(command, log=None):
             commands.append(command)
@@ -200,7 +201,7 @@ class DeveloperToolsTests(unittest.TestCase):
             project, "installed_matches", return_value=True
         ), mock.patch.object(
             project, "preserve_installed"
-        ) as backup:
+        ) as backup, contextlib.redirect_stderr(diagnostics):
             project.release(
                 settings,
                 {"id": "test.hud", "version": "1"},
@@ -230,6 +231,8 @@ class DeveloperToolsTests(unittest.TestCase):
         self.assertEqual(Path(record["package"]).read_bytes(),
                          (self.root / "dist/test.hud.swoftyaddon").read_bytes())
         self.assertIn("nick.f1-2026-halo", record["profile_warning"])
+        self.assertIn(record["profile_warning"], diagnostics.getvalue())
+        self.assertIn("SWOFTY profile conflict report:", diagnostics.getvalue())
         self.assertTrue(project.profile_enabled(store / "profiles/default.json", "nick.f1-2026-halo"))
         self.assertTrue((evidence / "profile-before.json").is_file())
         self.assertTrue((evidence / "install-report-v1.json").is_file())
