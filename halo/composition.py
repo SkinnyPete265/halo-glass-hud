@@ -11,7 +11,7 @@ from . import energy_panel, feature_assets, instruments, sectors, drs_motion, rp
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "view_model_data.hud_halo_v2_"
 STABLE_BASE_CROP = (27, 0, 3755,
-                    1668 + round(geo.ARTWORK_TOP_PADDING * geo.BASE_TEXTURE_RESOLUTION))
+                    2028 + round(geo.ARTWORK_TOP_PADDING * geo.BASE_TEXTURE_RESOLUTION))
 
 
 def crop_sprite(name, final):

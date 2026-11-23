@@ -28,14 +28,16 @@ class CompositionCropTests(unittest.TestCase):
                         edge_y = y + normal * math.cos(angle)
                         self.assertAlmostEqual(edges(edge_x)[index], edge_y, places=6)
 
-    def test_left_wing_turns_more_sharply_from_the_shared_crown(self):
-        self.assertEqual(layout.angle(layout.CX), 0.)
-        for distance in (100, 300, 540):
-            left, right = layout.CX-distance, layout.CX+distance
-            self.assertGreater(layout.top(left), layout.top(right))
-            difference = abs(layout.angle(left)) - layout.angle(right)
-            self.assertGreater(difference, 0.)
-            self.assertLess(difference, 5.)
+    def test_left_wing_tracks_the_marked_onboard_edges(self):
+        # Pixel coordinates in the owner's annotated crop at 0.82x.
+        for edge, marks, tolerance in (
+            (0, ((375,102),(276,150),(193,219),(162,251)), 4),
+            (1, ((396,186),(300,231),(234,282),(215,326)), 12),
+        ):
+            for px, py in marks:
+                x = layout.CX+(px-544)/.82
+                y = layout.wing_face_edges(x)[edge]
+                self.assertLess(abs(116+.82*(y-layout.CY)-py), tolerance)
 
     def test_60px_stays_stable_and_75px_expands_without_clipping(self):
         original = values()
@@ -66,7 +68,7 @@ class CompositionCropTests(unittest.TestCase):
                     self.assertEqual(crop, STABLE_BASE_CROP)
                     self.assertEqual(
                         (right - left, bottom - top),
-                        (3728, 1668 + round(layout.ARTWORK_TOP_PADDING
+                        (3728, 2028 + round(layout.ARTWORK_TOP_PADDING
                                            * layout.BASE_TEXTURE_RESOLUTION)),
                     )
                 else:
