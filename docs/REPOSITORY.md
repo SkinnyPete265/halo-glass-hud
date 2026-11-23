@@ -75,11 +75,12 @@ run one command in PowerShell:
 
 | Goal | Command |
 | --- | --- |
-| Package and install | `python -B tools/project.py release --install --native` |
-| Package only | `python -B tools/project.py release --native` |
+| Package and install | `python -B tools/project.py release --install` |
+| Package only | `python -B tools/project.py release` |
 
-`--native` rebuilds and tests the DLLs. Omit it only when the required DLLs
-are already built and verified for the candidate. The helper prints the release
+The release helper automatically rebuilds and tests the DLLs when their sources,
+headers, fixtures or binary contents change. It reuses verified DLLs for artwork-only
+changes. Add `--native` to force a rebuild. The helper prints the release
 evidence path under `build/releases/`. For an install, look for
 `installation verification passed`. Run local and GitHub installs one at a time.
 
@@ -229,6 +230,7 @@ package hash, outcome and cache or
 rollback if available. The directory holds the logs, validation and timings,
 and the install report after verification. The top-level timing files remain
 available for inspecting the most recent run.
+`native-validation.json` records the tested native inputs and both DLL hashes.
 If the exact-cache check fails, the release also saves SWOFTY's profile report
 as conflicts.log. This reads the last build without rebuilding the profile.
 

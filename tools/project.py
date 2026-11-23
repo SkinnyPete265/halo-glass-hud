@@ -172,16 +172,16 @@ def release(settings, manifest, args, *, result_path=None):
 def prepare_release(settings, manifest, args, folder, timings, record):
     version = manifest["version"]
     addon = manifest["id"]
-    command = [sys.executable, "-B", "tools/build.py", "--compose"]
-    if args.native:
-        command.append("--native")
+    command = [sys.executable, "-B", "tools/build.py", "--compose",
+               "--native" if args.native else "--ensure-native"]
     compose_log = folder / ("compose-v" + version + ".log")
     with timings.stage("artwork and composition"):
         run(command, compose_log)
-    for name in ("build/build-timings.json", "runtime/validation.json"):
+    for name in ("build/build-timings.json", "runtime/validation.json", "build/native/validation.json"):
         path = ROOT / name
         if path.exists():
-            shutil.copy2(path, folder / path.name)
+            destination = "native-validation.json" if name.startswith("build/native/") else path.name
+            shutil.copy2(path, folder / destination)
     record["source_inputs_sha256"] = read_json(folder / "validation.json").get("source_inputs_sha256")
     identity = build_environment_identity(settings)
     record["game"] = identity["game"]
@@ -305,7 +305,7 @@ def main():
         "--install", action="store_true", help="Install and verify a requested release"
     )
     parser.add_argument(
-        "--native", action="store_true", help="Rebuild DLLs and run native tests"
+        "--native", action="store_true", help="Force a DLL rebuild and run native tests"
     )
     parser.add_argument("--result", type=Path, help="Also write the release record to this path")
     args = parser.parse_args()

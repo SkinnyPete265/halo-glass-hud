@@ -1,9 +1,7 @@
 """Generate shared art quickly. Native and composer validation are opt-in."""
 import argparse
 import json
-import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 
@@ -12,38 +10,12 @@ sys.path.insert(0, str(ROOT))
 from halo import composition
 from build_inputs import artwork_inputs_fingerprint, file_hash
 from compatibility import runtime_inputs_fingerprint
+from native_build import PUBLISHERS, build_native, verified_dlls
 from project_config import local_settings, launcher_command, require_active_game
 from validate_registry import validate_registry
 
 def run(command, **options):
     subprocess.run(command, cwd=ROOT, check=True, **options)
-
-def native(zig_command="zig", *, tests_only=False):
-    build = ROOT / "build" / "native"
-    build.mkdir(parents=True, exist_ok=True)
-    zig = shutil.which(zig_command)
-    if not zig:
-        raise RuntimeError(f"Zig executable not found: {zig_command}")
-    # WinGet exposes Zig through a symlink. Zig needs the real executable path
-    # to locate its adjacent lib directory, so resolve the shim before invoking it.
-    zig = str(Path(zig).resolve())
-    environment = os.environ.copy()
-    environment["ZIG_GLOBAL_CACHE_DIR"] = str(ROOT / "build/zig-cache/global")
-    environment["ZIG_LOCAL_CACHE_DIR"] = str(ROOT / "build/zig-cache/local")
-    common = [zig, "c++", "-target", "x86_64-windows-gnu", "-std=c++23", "-O2",
-              "-Wall", "-Wextra", "-Wno-nullability-completeness",
-              "-I" + str(ROOT / "native/include")]
-    if not tests_only:
-        for source, destination in (("addon.cpp", "halo_hud_v2.dll"),
-                                    ("sector_times.cpp", "sector_times.dll")):
-            run(common + ["-shared", "-o", str(ROOT / "native" / destination),
-                          str(ROOT / "native/src" / source)], env=environment)
-    for name in ("dial_test", "sector_test"):
-        test = build / (name + ".exe")
-        run(common + ["-UNDEBUG", "-o", str(test), str(ROOT / "native/test" / (name + ".cpp"))],
-            env=environment)
-        run([str(test)])
-
 
 def artwork():
     """Reuse generated assets only when their inputs and recorded outputs match."""
@@ -81,6 +53,8 @@ def main():
     parser = argparse.ArgumentParser()
     native_mode = parser.add_mutually_exclusive_group()
     native_mode.add_argument("--native", action="store_true")
+    native_mode.add_argument("--ensure-native", action="store_true",
+                             help="Build and test native DLLs if validation is missing or stale")
     native_mode.add_argument("--native-tests", action="store_true",
                              help="Run native fixtures without generating artwork or DLLs")
     parser.add_argument("--compose", action="store_true")
@@ -92,7 +66,7 @@ def main():
     if args.native_tests:
         if args.compose:
             parser.error("--native-tests runs independently of --compose")
-        native(args.zig, tests_only=True)
+        build_native(ROOT, args.zig, tests_only=True)
         return
     if args.compose:
         settings = {**settings, "launcher": args.launcher}
@@ -112,9 +86,17 @@ def main():
         with Image.open(ROOT / sprite["png"]) as image:
             if image.width % 4 or image.height % 4:
                 raise ValueError(f"Non-aligned texture {sprite['png']}")
-    if args.native:
+    rebuild_native = args.native
+    if args.ensure_native:
+        try:
+            verified_dlls(ROOT, PUBLISHERS.values())
+        except RuntimeError:
+            rebuild_native = True
+        else:
+            print('Reused validated native DLLs after content checks.')
+    if rebuild_native:
         with timings.stage("native DLLs and tests"):
-            native(args.zig)
+            build_native(ROOT, args.zig)
     if args.compose:
         addon = json.loads((ROOT/'swofty.json').read_text(encoding='utf-8'))['id']
         from asset_only import try_refresh, try_reuse, record as record_composition

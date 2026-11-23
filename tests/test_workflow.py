@@ -20,6 +20,7 @@ import compatibility
 import package as packaging
 import project_config
 import fetch_sdk
+import native_build
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
@@ -68,6 +69,53 @@ class WorkflowTests(unittest.TestCase):
                   'runtime_archives': {name: build_inputs.file_hash(self.root/'runtime'/name)
                                        for name in ('hud_scene.erp', 'hud_template.erp')}}
         (self.root/'runtime/validation.json').write_text(json.dumps(record))
+
+    def test_package_requires_current_tested_native_dlls(self):
+        native = self.root / 'native'
+        (native / 'src').mkdir()
+        source = native / 'src/addon.cpp'
+        source.write_text('first source')
+        (self.root / 'tools/native_build.py').write_text('compiler settings')
+        self.manifest['operations']['native'] = [{'dll': 'native/halo_hud_v2.dll'}]
+        (self.root / 'swofty.json').write_text(json.dumps(self.manifest))
+        self.validation()
+
+        def compile_fixture(command, **_options):
+            if '-shared' in command:
+                Path(command[command.index('-o') + 1]).write_bytes(b'compiled publisher')
+
+        with (
+            mock.patch.object(native_build.shutil, 'which', return_value=sys.executable),
+            mock.patch.object(native_build.subprocess, 'run', side_effect=compile_fixture) as run,
+        ):
+            with self.assertRaisesRegex(RuntimeError, 'DLLs need validation'):
+                packaging.package()
+            native_build.build_native(self.root, 'zig')
+            package = packaging.package()
+            with zipfile.ZipFile(package) as archive:
+                self.assertEqual(archive.read('native/halo_hud_v2.dll'), b'compiled publisher')
+
+            (self.root / 'style.json').write_text('{"colour":"blue"}')
+            self.assertTrue(native_build.verified_dlls(self.root, ['native/halo_hud_v2.dll']))
+            self.validation()
+            source.write_text('second source')
+            with self.assertRaisesRegex(RuntimeError, 'DLLs need validation'):
+                packaging.package()
+
+            native_build.build_native(self.root, 'zig')
+            (native / 'halo_hud_v2.dll').write_bytes(b'changed publisher')
+            with self.assertRaisesRegex(RuntimeError, 'DLLs need validation'):
+                packaging.package()
+
+            def fail_fixture(command, **options):
+                if len(command) == 1:
+                    raise subprocess.CalledProcessError(1, command)
+                compile_fixture(command, **options)
+
+            run.side_effect = fail_fixture
+            with self.assertRaises(subprocess.CalledProcessError):
+                native_build.build_native(self.root, 'zig')
+            self.assertFalse((self.root / native_build.STAMP).exists())
 
     def test_artwork_tracks_assets_from_the_second_dial(self):
         self.registry['hud.element']['glass_dial_26'] = {

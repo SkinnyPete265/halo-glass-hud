@@ -67,8 +67,9 @@ paths come from the ignored `project.local.json`.
   Follow the numbering examples and release-note format in docs/REPOSITORY.md.
 
 - For a requested build and install, use
-  `python -B tools/project.py release --install`. Add `--native` for C++
-  changes. Omit `--install` when the request is for offline packaging.
+  `python -B tools/project.py release --install`. It rebuilds and tests stale
+  DLLs automatically. Use `--native` to force a rebuild. Omit `--install`
+  when the request is for offline packaging.
 - For a GitHub candidate, dispatch Local release from main with the exact
   approved commit. Use `install` mode for every approved test build and
   release checkpoint, unless the owner explicitly requests package-only.

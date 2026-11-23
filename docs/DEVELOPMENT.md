@@ -174,13 +174,13 @@ remove its changes from the next launch of that profile.
 Python 3.14, Pillow, SWOFTY and Zig are used locally. Run from this project folder.
 
 ```powershell
-python -B tools/build.py --compose
+python -B tools/build.py --compose --ensure-native
 python -B tools/package.py
 ```
 
-Add --native to build.py when changing the C++ source. That compiles the DLL and
-runs the focused state test with assertions enabled. --launcher and --data-dir
-can override the local executable and store paths.
+`--ensure-native` compiles and tests both DLLs if their validation is missing or
+stale. Use `--native` to force a rebuild. `--launcher` and `--data-dir` can
+override the local executable and store paths.
 
 The canonical manifest uses operations.hud. The installer uses precomposed
 operations.erp overlays. Full authoring sources are included under source/.

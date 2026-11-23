@@ -7,6 +7,7 @@ import re
 import zipfile
 import tempfile
 from compatibility import runtime_inputs_fingerprint
+from native_build import verified_dlls
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,7 +22,7 @@ SOURCE_FILES = (
     "tests/test_workflow.py",
     "tools/asset_only.py", "tools/build.py", "tools/build_inputs.py", "tools/check_time_trial.py",
     "tools/compatibility.py", "tools/extract_native_reference.py", "tools/f126_interop.py",
-    "tools/fetch_sdk.py", "tools/local_release.py", "tools/log_summary.py", "tools/native_interop.py",
+    "tools/fetch_sdk.py", "tools/local_release.py", "tools/log_summary.py", "tools/native_build.py", "tools/native_interop.py",
     "tools/package.py", "tools/prepare_runtime.py", "tools/project.py",
     "tools/project_config.py", "tools/Register-HaloReleaseWorker.ps1", "tools/release_state.py",
     "tools/stage_timing.py",
@@ -93,8 +94,8 @@ def package():
                  "runtime/hud_template.erp", "runtime/overlays.json",
                  "runtime/validation.json"):
         entries[name] = (ROOT / name).read_bytes()
-    for item in source_manifest["operations"]["native"]:
-        entries[item["dll"]] = (ROOT / item["dll"]).read_bytes()
+    native_paths = [item["dll"] for item in source_manifest["operations"]["native"]]
+    entries.update(verified_dlls(ROOT, native_paths))
 
     source_paths = {"swofty.json", "LICENSE", "README.md", "requirements.txt"}
     entries["source/CHANGELOG.md"] = entries["CHANGELOG.md"]

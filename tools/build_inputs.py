@@ -11,10 +11,11 @@ def file_hash(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def files_fingerprint(paths):
+def files_fingerprint(paths, root=None):
+    root = ROOT if root is None else root
     digest = hashlib.sha256()
     for path in sorted(set(paths)):
-        digest.update(path.relative_to(ROOT).as_posix().encode('utf-8'))
+        digest.update(path.relative_to(root).as_posix().encode('utf-8'))
         digest.update(b'\0')
         digest.update(file_hash(path).encode('ascii'))
         digest.update(b'\0')
