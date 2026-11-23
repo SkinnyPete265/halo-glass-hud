@@ -43,7 +43,7 @@ def crop_sprite(name, final):
     if not bounds:
         raise ValueError('Empty sprite ' + name)
     left, top, right, bottom = bounds
-    if name.startswith('lit_') or name=='white_arc':
+    if name.startswith('lit_') or name in ('white_arc','shoulder_glass'):
         # Leave a transparent BC7 block around the filtered edge.
         left, top, right, bottom = left-4, top-4, right+4, bottom+4
     right += (4 - (right - left) % 4) % 4
@@ -99,6 +99,7 @@ def write():
 
     sprite('base',art.texture_base,geo.BASE_TEXTURE_RESOLUTION,
            origin=(-geo.WING_TEXTURE_PADDING, -geo.ARTWORK_TOP_PADDING))
+    sprite('shoulder_glass',art.shoulder_glass,2,origin=(0.,geo.WHITE_ARC_TOP))
     sprite('white_arc',art.white_arc,art.S,origin=(0.,geo.WHITE_ARC_TOP))
     sprite('rpm_fill',art.rpm_fill)
     # The composer encodes these full-frame textures for the native input masks.
@@ -114,6 +115,7 @@ def write():
     preview = {PREFIX + "kph": "250", PREFIX + "mph": "155", "game.revs": .89, "game.ers_stored": .75,
                "game.has_ers": True, PREFIX + "rpm": "11585",
                PREFIX + "drs_reveal": 0.0, PREFIX + "drs_visible": False}
+    elements.append({'kind':'sprite','id':'shoulder_glass','sprite':'shoulder_glass','layer':19})
     elements.append({'kind':'sprite','id':'white_arc','sprite':'white_arc','layer':21})
     pedal_gate = PREFIX+'pedals_stepped'
     preview[pedal_gate] = False

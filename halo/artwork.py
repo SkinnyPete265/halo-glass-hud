@@ -19,6 +19,32 @@ def canvas(top_padding=0):
     return Image.new("RGBA", (geo.WIDTH * S,
                                round((geo.HEIGHT + top_padding) * S)))
 
+def shoulder_glass():
+    """Diffuse glass behind the disc and first section of each wing."""
+    reach = 350
+    top = geo.WHITE_ARC_TOP
+    image = Image.new('RGBA',(geo.WIDTH*S,round((275-top)*S)))
+    pixels = image.load()
+    for xx in range(round((geo.CX-reach)*S),round((geo.CX+reach)*S)):
+        dx = abs((xx+.5)/S-geo.CX)
+        curve = math.hypot(dx,95.)-95.
+        upper = -30. + .62*curve
+        lower = 202. + .18*curve
+        end = 1.-mat._smooth((dx-175.)/(reach-175.))
+        for yy in range(math.floor((upper-top)*S),math.ceil((lower-top)*S)):
+            y = top+(yy+.5)/S
+            rim = mat._smooth((math.hypot(dx,y-geo.CY)-89.)/6.)
+            edge = mat._smooth((y-upper)/33.)*mat._smooth((lower-y)/31.)
+            # A pale reflected strip blends into a denser blue-grey body.
+            reflection = math.exp(-((y-upper-24.)/20.)**2)
+            lower_light = math.exp(-((lower-y-27.)/22.)**2)
+            light = reflection + .38*lower_light
+            alpha = round(192*edge*end*rim)
+            pixels[xx,yy] = (round(42+95*light),round(55+94*light),
+                             round(82+83*light),alpha)
+    return image
+
+
 def white_arc():
     """Neutral shoulder line, sampled by perpendicular distance at 3x resolution."""
     half_span = 440
