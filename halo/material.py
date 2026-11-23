@@ -87,9 +87,9 @@ RPM_NUMBER_GLOW = (101, 181, 222)
 GEAR_IDLE_CORE = (239, 248, 253)
 GEAR_SELECTED_CORE = (215, 235, 249)
 ROOT_SHADE_FRACTION = .20
-ROOT_SHADE_ALPHA = 88.
+ROOT_SHADE_ALPHA = 65.
 WING_SMOKE_ALPHA = 15.
-FACET_ALPHA = 120.
+FACET_ALPHA = 94.
 WING_TIP_FADE_WIDTH = 32.0
 
 
@@ -611,7 +611,8 @@ def glass_wings(variant=None):
                 base_alpha=FACET_ALPHA*fade
                 alpha=round(base_alpha+(255-base_alpha)*smoke/255)
                 alpha=round(alpha*coverage)
-                rgb=tuple(round(base+(dark-base)*root*.65+grain*root*1.2)
+                sheen=6*math.exp(-((t-.28)/.27)**2)
+                rgb=tuple(round(base+(dark-base)*root*.65+sheen+grain*root*1.2)
                           for base,dark in ((7,3),(22,10),(29,22)))
                 facet_pixels[screen_x,yy]=rgb+(alpha,)
     image=Image.alpha_composite(image,facet)
