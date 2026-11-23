@@ -28,6 +28,13 @@ class CompositionCropTests(unittest.TestCase):
                         edge_y = y + normal * math.cos(angle)
                         self.assertAlmostEqual(edges(edge_x)[index], edge_y, places=6)
 
+    def test_wing_profiles_mirror_from_root_through_tip(self):
+        for distance in range(round(layout.WING_TEXTURE_END-layout.CX)+1):
+            left, right = layout.CX-distance, layout.CX+distance
+            self.assertEqual(layout.wing_face_edges(left), layout.wing_face_edges(right))
+            self.assertEqual(layout.wing_backing_bounds(left), layout.wing_backing_bounds(right))
+            self.assertAlmostEqual(layout.angle(left), -layout.angle(right))
+
     def test_60px_stays_stable_and_75px_expands_without_clipping(self):
         original = values()
         results = []
@@ -57,7 +64,7 @@ class CompositionCropTests(unittest.TestCase):
                     self.assertEqual(crop, STABLE_BASE_CROP)
                     self.assertEqual(
                         (right - left, bottom - top),
-                        (3728, 2168 + round(layout.ARTWORK_TOP_PADDING
+                        (3728, 1936 + round(layout.ARTWORK_TOP_PADDING
                                            * layout.BASE_TEXTURE_RESOLUTION)),
                     )
                 else:

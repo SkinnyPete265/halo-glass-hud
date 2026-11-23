@@ -13,9 +13,8 @@ CX, CY = 582.0, 95.0
 ARTWORK_TOP_PADDING = 24.0
 WHITE_ARC_CROWN = CY - 1.5 * 89.
 WHITE_ARC_TOP = math.floor(WHITE_ARC_CROWN) - 4
-# Upper panel radii traced separately from the cockpit reference, in art pixels.
-LEFT_FACE_RADIUS = 541.0
-RIGHT_FACE_RADIUS = 925.0
+# Both panels wrap around the dial on the same arc, in art pixels.
+WING_FACE_RADIUS = 655.0
 # Continue the offset curves along their common tangent past the visible trace.
 WING_TANGENT_LIMIT = math.radians(55.)
 WING_LIMIT_SIN = math.sin(WING_TANGENT_LIMIT)
@@ -45,17 +44,12 @@ WING_TEXTURE_PADDING = max(0, math.ceil(WING_TEXTURE_END - 2 * CX) + 6)
 WING_CORNER_RADIUS = 8.0
 
 
-def face_radius(x):
-    return LEFT_FACE_RADIUS if x < CX else RIGHT_FACE_RADIUS
-
-
 def wing_surface_y(x, depth):
     """Parallel curves at a normal distance from the upper instrument edge."""
-    outer = face_radius(x)
+    outer = WING_FACE_RADIUS
     radius = outer - depth
     distance = abs(x - CX)
-    # Join the two traced apex heights inside the central instrument.
-    crown = 49. + 6.*math.sin(max(-1., min(1., (x-CX)/80.))*math.pi/2)
+    crown = 49.
     join = radius * WING_LIMIT_SIN
     if distance <= join:
         return crown + outer - math.sqrt(radius * radius - distance * distance)
@@ -76,7 +70,7 @@ def wing_face_edges(x):
 
 
 def tail_bottom():
-    return max(wing_backing_bounds(x)[1] for x in (2*CX-WING_TEXTURE_END, WING_TEXTURE_END))
+    return wing_backing_bounds(WING_TEXTURE_END)[1]
 
 
 WING_TIP_TOP = wing_backing_bounds(WING_FACE_END)[0]
@@ -189,7 +183,7 @@ def gears_caption():
     return Text(x, top(x) + STYLE['gears_y'], STYLE['gears_size'], angle(x))
 
 def angle(x):
-    radius = face_radius(x) - (WING_CENTER_OFFSET-WING_FACE_TOP)
+    radius = WING_FACE_RADIUS - (WING_CENTER_OFFSET-WING_FACE_TOP)
     return math.copysign(math.degrees(math.asin(min(WING_LIMIT_SIN, abs(x-CX)/radius))), x-CX)
 
 def wing_content_x(x):
@@ -226,7 +220,7 @@ def drs_rail_points(edge, side=1):
 
 
 def arc_length(x):
-    radius = face_radius(x) - (WING_CENTER_OFFSET-WING_FACE_TOP)
+    radius = WING_FACE_RADIUS - (WING_CENTER_OFFSET-WING_FACE_TOP)
     tail = max(0., abs(x-CX) - radius*WING_LIMIT_SIN)
     return radius*math.radians(angle(x)) + math.copysign(tail/WING_LIMIT_COS, x-CX)
 
@@ -234,7 +228,7 @@ def gear_position(gear):
     distance = arc_length(780.0) + (
         arc_length(1025.0) - arc_length(780.0)
     ) * (gear - 1) / 7
-    radius = RIGHT_FACE_RADIUS - (WING_CENTER_OFFSET-WING_FACE_TOP)
+    radius = WING_FACE_RADIUS - (WING_CENTER_OFFSET-WING_FACE_TOP)
     x = wing_content_x(CX + radius * math.sin(distance / radius))
     return Text(x, top(x) + GEAR_ROW_OFFSET, GEAR_NUMBER_SIZE, angle(x) * 0.25)
 
