@@ -618,15 +618,16 @@ def glass_wings(variant=None):
                           for base,dark in ((7,3),(22,10),(29,22)))
                 facet_pixels[screen_x,yy]=rgb+(alpha,)
     image=Image.alpha_composite(image,facet)
+    ends = geo.wing_edge_ends()
     # Broken highlights and open component contours carry the curvature.
     for side in (-1,1):
         # Rounded inner corner, open outer ends, stronger local edge next to
         # the information rather than outlining the entire backing.
-        inner=WING_FACE_START;r=WING_CORNER_RADIUS;end=WING_FACE_END
+        inner=WING_FACE_START;r=WING_CORNER_RADIUS
         def face_edges(x):
             return geo.wing_face_edges(CX+side*(x-CX))
 
-        top_run=[(x,face_edges(x)[0]) for x in _samples(end, inner+r)]
+        top_run=[(x,face_edges(x)[0]) for x in _samples(CX+ends[side,0], inner+r)]
         path=list(top_run)
         for i in range(33):
             a=-math.pi/2-math.pi*i/64
@@ -636,7 +637,7 @@ def glass_wings(variant=None):
             a=math.pi-math.pi*i/64
             x=inner+r+r*math.cos(a)
             path.append((x,face_edges(x)[1]-r+r*math.sin(a)))
-        bottom_run=[(x,face_edges(x)[1]) for x in _samples(inner+r,end)]
+        bottom_run=[(x,face_edges(x)[1]) for x in _samples(inner+r,CX+ends[side,1])]
         path += bottom_run[1:]
         if side<0:
             path=[(2*CX-x,y) for x,y in path]
@@ -818,7 +819,8 @@ def wing_edge_effects(padding=0, draw_from=None, draw_to=None, variant=None,
 
     # Preserve the original edge treatment up to its existing fade point.
     # Then carry its fade and both backing edges continuously beyond the wing.
-    fade_start = WING_EFFECT_END - 42.
+    fade_width = geo.WING_TEXTURE_END - (WING_EFFECT_END - 42.)
+    ends = geo.wing_edge_ends(exterior=True)
     extension_start = WING_EFFECT_END - CX
     profiles = _wing_edge_profiles(style)
     context_columns = set()
@@ -842,21 +844,17 @@ def wing_edge_effects(padding=0, draw_from=None, draw_to=None, variant=None,
             owned_column = draw_from <= distance < draw_to
             if not owned_column:
                 context_columns.add(xx)
-            right_x = CX + distance
-            if right_x <= fade_start:
-                fade = _smooth((right_x - WING_FACE_START) / 24.)
-            else:
-                fade = (
-                    _smooth((right_x - WING_FACE_START) / 24.)
-                    * _smooth((CX + texture_end - right_x)
-                              / (CX + texture_end - fade_start))
-                )
+            root_fade = _smooth((distance-start)/24.)
             before = bounds(distance - .5 / S)
             after = bounds(distance + .5 / S)
             extension_strength = _smooth((distance - extension_start) / 10.)
             shadows = (36. + 36. * extension_strength, 44. + 40. * extension_strength)
             for y, lo, hi, direction, shadow in zip(bounds(distance), before, after, (-1, 1), shadows):
+                edge_end = ends[side, 0 if direction < 0 else 1]
+                if distance >= edge_end:
+                    continue
                 slope = side * (hi - lo) * S
+                fade = root_fade * _smooth((edge_end-distance)*math.hypot(1., slope)/fade_width)
                 _edge_column(masks, profiles, xx, y + top_padding, slope, direction,
                              style['tail_radius'], fade, shadow)
 

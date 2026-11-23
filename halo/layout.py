@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from functools import lru_cache
 import math
+from bisect import bisect_left
 from .tuning import values
 
 STYLE = values()
@@ -25,7 +26,7 @@ HUD_SIZE_BASE_FACTOR = 1.10
 HUD_SIZE_FACTOR = HUD_SIZE_BASE_FACTOR * STYLE['hud_size'] / 100.0
 # Restore the v0.31.0 effective scale: 0.0065 * 1.485 / 0.018.
 HUD_SCALE = 0.53625 * HUD_SIZE_FACTOR
-WING_HEIGHT = 117.0
+WING_HEIGHT = 133.0
 WING_CENTER_OFFSET = WING_HEIGHT / 2
 WING_FACE_TOP = 10.0
 WING_FACE_BOTTOM = WING_HEIGHT - 9.0
@@ -50,8 +51,8 @@ def wing_profile(run, left):
     # Fit both rows of owner marks at constant normal width. Continue the
     # final traced tangent beyond the sample instead of extrapolating x**4.
     t = min(run, LEFT_TRACE_END)
-    quadratic = .00068336
-    quartic = 131.232 / 500.**4
+    quadratic = .95 * .00068336
+    quartic = .95 * 131.232 / 500.**4
     rise = quadratic*t*t + quartic*t**4
     slope = 2*quadratic*t + 4*quartic*t**3
     curvature = 2*quadratic + 12*quartic*t*t if run <= LEFT_TRACE_END else 0.
@@ -59,7 +60,7 @@ def wing_profile(run, left):
 
 
 def top(x):
-    return 39. + wing_profile(abs(x-CX), x<CX)[0]
+    return 31. + wing_profile(abs(x-CX), x<CX)[0]
 
 
 @lru_cache(maxsize=65536)
@@ -74,7 +75,7 @@ def wing_surface_y(x, depth):
         error = run - offset*slope/normal_length - distance
         run -= error / (1. - offset*derivative/normal_length**3)
     rise, slope, _ = wing_profile(run, x<CX)
-    return 39. + rise + WING_CENTER_OFFSET + offset/math.hypot(1., slope)
+    return 31. + rise + WING_CENTER_OFFSET + offset/math.hypot(1., slope)
 
 
 def wing_backing_bounds(x):
@@ -83,6 +84,32 @@ def wing_backing_bounds(x):
 
 def wing_face_edges(x):
     return wing_surface_y(x, 0.), wing_surface_y(x, WING_FACE_BOTTOM-WING_FACE_TOP)
+
+
+def wing_edge_ends(exterior=False):
+    """End all four strokes at the same travelled distance along the panel."""
+    bounds = wing_backing_bounds if exterior else wing_face_edges
+    start = WING_FACE_START-CX + (0 if exterior else WING_CORNER_RADIUS)
+    end = (WING_TEXTURE_END if exterior else WING_FACE_END)-CX
+    count = math.ceil(end-start)
+    step = (end-start)/count
+    lengths = {}
+    for side in (-1, 1):
+        upper, lower = [0.], [0.]
+        previous = bounds(CX+side*start)
+        for i in range(1, count+1):
+            current = bounds(CX+side*(start+i*step))
+            for j, samples in enumerate((upper, lower)):
+                samples.append(samples[-1]+math.hypot(step, current[j]-previous[j]))
+            previous = current
+        lengths[side, 0], lengths[side, 1] = upper, lower
+    target = min(samples[-1] for samples in lengths.values())
+    ends = {}
+    for key, samples in lengths.items():
+        i = bisect_left(samples, target)
+        fraction = (target-samples[i-1])/(samples[i]-samples[i-1])
+        ends[key] = start+(i-1+fraction)*step
+    return ends
 
 
 def tail_bottom():
