@@ -2,6 +2,23 @@
 
 Development and beta builds use the same versioned notes intended for future releases.
 
+## 0.16.0-dev3
+
+### New/Added
+
+- Added a thin white arc above the dial with softly fading ends.
+- Made both wing panels more transparent and concentrated the frost near their roots.
+
+### Fixes
+
+- Refitted the wing curves around the cockpit and widened the panels for more readout space.
+- Matched the cyan edge lengths and restored the green DRS and Straight Mode rails outside them.
+- Matched the spacing between the KM/H and MPH numbers and their unit labels.
+
+### Miscellaneous
+
+- Removed the decorative wing extensions.
+
 ## 0.16.0-dev2
 
 ### New/Added
