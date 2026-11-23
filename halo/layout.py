@@ -257,12 +257,12 @@ def drs_rail_points(edge, side=1):
     upper = edge == 'top'
     end = wing_edge_ends()[side, 0 if upper else 1]
     start = DRS_RAIL_START-CX
-    depth = 3. if upper else WING_FACE_BOTTOM-WING_FACE_TOP-3.
     steps = math.ceil(end-start)
     points = []
     for i in range(steps+1):
         x = CX + side*(start+(end-start)*i/steps)
-        points.append((x, wing_surface_y(x, depth)))
+        backing_top, backing_bottom = wing_backing_bounds(x)
+        points.append((x, backing_top+5. if upper else backing_bottom-5.))
     return points
 
 

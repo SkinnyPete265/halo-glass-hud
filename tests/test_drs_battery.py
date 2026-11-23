@@ -238,9 +238,12 @@ class InstrumentRefinementTests(unittest.TestCase):
             for k,edge in enumerate(geo.DRS_RAIL_EDGES):
                 points = geo.drs_rail_points(edge,side)
                 self.assertAlmostEqual(points[-1][0],geo.CX+side*ends[side,k])
-                depth = 3. if k==0 else geo.WING_FACE_BOTTOM-geo.WING_FACE_TOP-3.
                 for x,y in points:
-                    self.assertAlmostEqual(y,geo.wing_surface_y(x,depth))
+                    backing = geo.wing_backing_bounds(x)
+                    face = geo.wing_face_edges(x)
+                    self.assertAlmostEqual(y, backing[k]+(5. if k==0 else -5.))
+                    clearance = face[0]-y if k==0 else y-face[1]
+                    self.assertGreater(clearance,0.)
         feature_assets.drs_clip_mask.cache_clear()
         fade=feature_assets.drs_clip_mask()
         before=round((geo.WING_FACE_END-16.)*art.S)
